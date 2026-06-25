@@ -39,6 +39,7 @@ nextflow run . -profile bunya --mode illumina_metagenome \
 
 ## Documentation
 
+- [docs/configuration.md](docs/configuration.md) — what each config file is and what to edit for setup.
 - [docs/usage.md](docs/usage.md) — per-mode usage and the samplesheet spec (incl. hybrid long+short).
 - [docs/databases.md](docs/databases.md) — DB params and the optional download workflow.
 - [docs/containers.md](docs/containers.md) — `.sif` image checklist.
