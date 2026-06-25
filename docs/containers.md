@@ -11,38 +11,33 @@ This pipeline is **containers-only** (Apptainer). Two sources:
    `/srv/db/containers` locally). Mapped in `conf/containers.config` as
    `"${params.container_base}/<name>.sif"`.
 
-## .sif image checklist (bespoke tools)
+## Illumina-metagenome containers
 
-Provide/confirm these images at `params.container_base` (filenames are editable
-in `conf/containers.config`):
+### Auto-pulled from quay.io biocontainers — nothing to build
+These are already wired in `conf/containers.config` to quay URIs; Apptainer pulls
+and caches them on first use: **sylph, singlem, coverm, pyrodigal, cd-hit, dram,
+checkm-genome (CheckM1), nonpareil, seqkit** (glue steps) and **python** (bin/
+helper). Plus the nf-core modules (fastp, spades, gtdbtk, checkm2, geNomad, checkv).
 
-| Image (`<name>.sif`)   | Tool(s)                          | Used by mode |
-|------------------------|----------------------------------|--------------|
-| `sylph_0.9.0`          | sylph                            | metagenomes |
-| `singlem_0.19.0`       | singlem                          | metagenomes |
-| `cleanifier_1.3.0`     | cleanifier                       | host removal |
-| `minimap2_2.28`        | minimap2 + samtools              | host removal / mapping |
-| `aviary_0.12.0`        | Aviary (complex deps)            | metagenomes |
-| `coverm_0.7.0`         | CoverM                           | derep + mapping |
-| `pyrodigal_3.6.3`      | pyrodigal                        | gene calling |
-| `cdhit_4.8.1`          | cd-hit                           | gene catalogue |
-| `seqkit_2.8`           | small fasta munging              | prep/process steps |
-| `python_3.11`          | bin/ helper scripts              | tabulate, etc. |
-| `dram_1.4.6`           | DRAM                             | annotation |
-| `checkm1_1.2.3`        | CheckM1                          | bin QC |
-| `nonpareil_3.4.1`      | nonpareil                        | coverage |
-| `genomespot_1.0`       | GenomeSPOT                       | bin growth prediction |
-| `checkv_1.0.3`         | CheckV + blast (anicalc/aniclust)| clustering |
-| `fastplong_0.4.1`      | fastplong                        | nanopore QC |
-| `myloasm_0.5.1`        | myloasm                          | nanopore meta assembly |
-| `autocycler_0.6.1`     | autocycler                       | nanopore isolate assembly |
-| `dorado_1.4.0`         | dorado (GPU)                     | basecall/polish |
-| `polypolish_0.6.1`     | polypolish                       | hybrid polish |
-| `dnaapler_1.3.0`       | dnaapler                         | reorientation |
-| `shovill_1.1.0`        | shovill                          | illumina isolate assembly |
-| `chewbbaca_3.3.10`     | chewBBACA                        | cgMLST |
-| `parsnp_2.1.4`         | parsnp                           | core alignment |
-| `fastani_1.33`         | fastANI                          | comparative |
+### Must provide a local `.sif` at `params.container_base`
+Either not on biocontainers, or a process needs two tools in one image:
+
+| Image (`<name>.sif`)   | Why a local image | Used by |
+|------------------------|-------------------|---------|
+| `aviary_0.12.0`        | complex dependency stack | binning |
+| `genomespot_1.0`       | not packaged on biocontainers | bin growth prediction (optional) |
+| `minimap2_samtools`    | needs minimap2 **+** samtools together | host removal (optional) |
+| `checkv_blast`         | needs blast+ **+** python3 together | virus/plasmid clustering |
+
+For the two-tool images, either build a small combined image or use a mulled
+biocontainer (e.g. nf-core's `minimap2`+`samtools` mulled image).
+
+## Other-mode containers (scaffolds)
+Filled as local `.sif` placeholders for now: `fastplong`, `cleanifier`, `myloasm`,
+`autocycler`, `dorado`, `polypolish`, `dnaapler`, `shovill`, `chewbbaca`, `parsnp`,
+`fastani`. Most (shovill, fastplong, polypolish, dnaapler, chewbbaca, parsnp,
+fastani) are single biocontainers — swap them to quay URIs the same way when you
+build those workflows. `dorado`, `myloasm`, `autocycler`, `cleanifier` are bespoke.
 
 ## Apptainer config
 
