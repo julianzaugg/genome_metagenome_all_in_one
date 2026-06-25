@@ -1,26 +1,26 @@
 /*
- * DOWNLOAD_DBS — SCAFFOLD (v1: wiring + TODO stubs)
+ * DOWNLOAD_DBS — fetch/stage reference databases into params.db_outdir.
  *
- * Fetch/stage reference databases into params.db_outdir using each tool's own
- * downloader, so users can either point the --*_db params at existing locations
- * OR build them here. Select with --download_db <name,name,...|all>.
- *
- *   gtdbtk   -> `gtdbtk download-db`
- *   genomad  -> `genomad download-database`
- *   checkm2  -> `checkm2 database --download`
- *   checkv   -> `checkv download_database`
- *   bakta    -> `bakta_db download`
- *   dram     -> `DRAM-setup.py prepare_databases`
- *   singlem  -> fetch metapackage
+ * Select with --download_db <name,name,...|all>. Users can instead point the
+ * --*_db params at existing locations and never run this. See docs/databases.md.
  */
+
+include { DL_GTDBTK; DL_CHECKM2; DL_GENOMAD; DL_CHECKV;
+          DL_BAKTA;  DL_DRAM;    DL_SINGLEM } from '../modules/local/download_dbs'
 
 workflow DOWNLOAD_DBS {
 
     def requested = (params.download_db ?: 'all').toString().toLowerCase()
-    log.info "[gmaio] download_dbs: requested = '${requested}' -> ${params.db_outdir}"
+                        .split(',').collect { it.trim() } as Set
+    def want = { String name -> requested.contains('all') || requested.contains(name) }
 
-    // TODO: one process per DB (label process_low, own container), guarded by `requested`.
-    //       Each writes to "${params.db_outdir}/<name>" and prints the path to set as --<name>_db.
+    log.info "[gmaio] download_dbs: ${requested.join(', ')} -> ${params.outdir}/${params.db_outdir}"
 
-    log.warn "[gmaio] mode 'download_dbs' is a SCAFFOLD — DB download processes are not yet implemented. See docs/databases.md."
+    if (want('gtdbtk'))  DL_GTDBTK()
+    if (want('checkm2')) DL_CHECKM2()
+    if (want('genomad')) DL_GENOMAD()
+    if (want('checkv'))  DL_CHECKV()
+    if (want('bakta'))   DL_BAKTA()
+    if (want('dram'))    DL_DRAM()
+    if (want('singlem')) DL_SINGLEM()
 }
