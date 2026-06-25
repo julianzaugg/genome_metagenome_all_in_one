@@ -2,6 +2,10 @@
 .nextflow*
 work/
 results*/
+results_test/
+
+# Local dev tooling (machine-specific launcher/wrapper; see docs/development.md)
+.bin/
 .nf-test/
 .nf-test.log
 *.code-workspace

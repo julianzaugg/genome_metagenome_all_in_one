@@ -1,0 +1,131 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://raw.githubusercontent.com/ace/gmaio/main/nextflow_schema.json",
+    "title": "gmaio pipeline parameters",
+    "description": "Genome & metagenome all-in-one: isolate/metagenome x Illumina/Nanopore",
+    "type": "object",
+    "defs": {
+        "core": {
+            "title": "Core options",
+            "type": "object",
+            "required": ["mode"],
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": ["illumina_metagenome", "nanopore_metagenome", "illumina_isolate", "nanopore_isolate", "download_dbs"],
+                    "description": "Which track workflow to run."
+                },
+                "input": {
+                    "type": "string",
+                    "format": "file-path",
+                    "mimetype": "text/csv",
+                    "schema": "assets/schema_input.json",
+                    "description": "Path to the samplesheet CSV (not required for --mode download_dbs)."
+                },
+                "outdir": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "Output directory.",
+                    "default": "results"
+                },
+                "publish_dir_mode": {
+                    "type": "string",
+                    "default": "copy",
+                    "enum": ["symlink", "rellink", "link", "copy", "copyNoFollow", "move"],
+                    "hidden": true
+                },
+                "email": { "type": "string", "hidden": true },
+                "monochrome_logs": { "type": "boolean", "hidden": true }
+            }
+        },
+        "containers": {
+            "title": "Containers",
+            "type": "object",
+            "properties": {
+                "container_base": {
+                    "type": "string",
+                    "description": "Directory holding local .sif images for bespoke tools (set per-profile)."
+                }
+            }
+        },
+        "databases": {
+            "title": "Reference databases",
+            "type": "object",
+            "description": "Paths to pre-built databases. Override per profile, or build with --mode download_dbs.",
+            "properties": {
+                "gtdbtk_db":           { "type": "string", "description": "GTDB-Tk reference data dir (GTDBTK_DATA_PATH)." },
+                "checkm2_db":          { "type": "string", "description": "CheckM2 database dir (CHECKM2_DATA_PATH)." },
+                "checkm1_db":          { "type": "string", "description": "CheckM1 database dir." },
+                "singlem_metapackage": { "type": "string", "description": "SingleM metapackage (SINGLEM_METAPACKAGE_PATH)." },
+                "sylph_db":            { "type": "string", "description": "Sylph database (.syldb) / dir." },
+                "bakta_db":            { "type": "string", "description": "Bakta database dir." },
+                "dram_db":             { "type": "string", "description": "DRAM database dir." },
+                "genomad_db":          { "type": "string", "description": "geNomad database dir." },
+                "checkv_db":           { "type": "string", "description": "CheckV database dir." },
+                "eggnog_db":           { "type": "string", "description": "eggNOG data dir (EGGNOG_DATA_DIR)." },
+                "amrfinder_db":        { "type": "string", "description": "AMRFinderPlus DB dir (null = use container's bundled DB)." },
+                "host_ref":            { "type": "string", "description": "Default host reference FASTA (overridden per-sample by host_ref column)." },
+                "cleanifier_db":       { "type": "string", "description": "Cleanifier database / index." },
+                "download_db":         { "type": "string", "description": "Comma-list of DB names or 'all' (only with --mode download_dbs)." },
+                "db_outdir":           { "type": "string", "default": "databases", "description": "Where --mode download_dbs writes." }
+            }
+        },
+        "steps": {
+            "title": "Step toggles",
+            "type": "object",
+            "properties": {
+                "skip_qc":              { "type": "boolean" },
+                "skip_sylph":           { "type": "boolean" },
+                "skip_singlem":         { "type": "boolean" },
+                "skip_host_removal":    { "type": "boolean" },
+                "skip_assembly":        { "type": "boolean" },
+                "skip_binning":         { "type": "boolean" },
+                "skip_dereplication":   { "type": "boolean" },
+                "skip_read_mapping":    { "type": "boolean" },
+                "skip_gene_catalogue":  { "type": "boolean" },
+                "skip_annotation":      { "type": "boolean" },
+                "skip_taxonomy":        { "type": "boolean" },
+                "skip_checkm":          { "type": "boolean" },
+                "skip_mobile_elements": { "type": "boolean" },
+                "run_nonpareil":        { "type": "boolean", "default": true },
+                "run_genomespot":       { "type": "boolean", "default": true },
+                "run_checkm1":          { "type": "boolean", "default": true }
+            }
+        },
+        "tool_choice": {
+            "title": "Tool-choice slots",
+            "type": "object",
+            "properties": {
+                "catalogue_clusterer": { "type": "string", "enum": ["cdhit", "mmseqs"], "default": "cdhit" },
+                "core_alignment":      { "type": "string", "enum": ["parsnp", "snippy"], "default": "parsnp" },
+                "tree_builder":        { "type": "string", "enum": ["iqtree", "raxml"], "default": "iqtree" }
+            }
+        },
+        "resources": {
+            "title": "Resource ceilings",
+            "type": "object",
+            "properties": {
+                "max_cpus":   { "type": "integer", "default": 16 },
+                "max_memory": { "type": "string", "default": "128.GB", "pattern": "^\\d+(\\.\\d+)?\\.?\\s*(K|M|G|T)?B$" },
+                "max_time":   { "type": "string", "default": "72.h", "pattern": "^(\\d+(\\.\\d+)?\\.?\\s*(s|m|h|d|day)\\s*)+$" }
+            }
+        },
+        "generic": {
+            "title": "Generic",
+            "type": "object",
+            "properties": {
+                "validate_params": { "type": "boolean", "default": true, "hidden": true },
+                "help":            { "type": "boolean", "hidden": true }
+            }
+        }
+    },
+    "allOf": [
+        { "$ref": "#/defs/core" },
+        { "$ref": "#/defs/containers" },
+        { "$ref": "#/defs/databases" },
+        { "$ref": "#/defs/steps" },
+        { "$ref": "#/defs/tool_choice" },
+        { "$ref": "#/defs/resources" },
+        { "$ref": "#/defs/generic" }
+    ]
+}
