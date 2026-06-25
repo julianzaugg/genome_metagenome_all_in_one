@@ -11,33 +11,35 @@ This pipeline is **containers-only** (Apptainer). Two sources:
    `/srv/db/containers` locally). Mapped in `conf/containers.config` as
    `"${params.container_base}/<name>.sif"`.
 
-## Illumina-metagenome containers
-
 ### Auto-pulled from quay.io biocontainers — nothing to build
-These are already wired in `conf/containers.config` to quay URIs; Apptainer pulls
-and caches them on first use: **sylph, singlem, coverm, pyrodigal, cd-hit, dram,
-checkm-genome (CheckM1), nonpareil, seqkit** (glue steps) and **python** (bin/
-helper). Plus the nf-core modules (fastp, spades, gtdbtk, checkm2, geNomad, checkv).
+Nearly every tool is wired to a quay.io biocontainer in `conf/containers.config`
+(exact build tags resolved from the quay API); Apptainer pulls and caches each on
+first use. This covers — across all modes — sylph, singlem, fastplong, cleanifier,
+shovill, myloasm, autocycler, polypolish, dnaapler, **aviary**, coverm, pyrodigal,
+cd-hit, mmseqs2, dram, checkm-genome (CheckM1), nonpareil, blast (checkv
+clustering), bakta, chewbbaca, parsnp, fastani, seqkit (glue), python (helpers),
+and the DB downloaders. Plus the nf-core modules (fastp, spades, gtdbtk, checkm2,
+geNomad, checkv).
 
 ### Must provide a local `.sif` at `params.container_base`
-Either not on biocontainers, or a process needs two tools in one image:
+Only three — tools not packaged on biocontainers, or needing two tools together:
 
 | Image (`<name>.sif`)   | Why a local image | Used by |
 |------------------------|-------------------|---------|
-| `aviary_0.12.0`        | complex dependency stack | binning |
+| `dorado_1.4.0`         | ONT-proprietary, not on biocontainers | Nanopore basecall/polish |
 | `genomespot_1.0`       | not packaged on biocontainers | bin growth prediction (optional) |
 | `minimap2_samtools`    | needs minimap2 **+** samtools together | host removal (optional) |
-| `checkv_blast`         | needs blast+ **+** python3 together | virus/plasmid clustering |
 
-For the two-tool images, either build a small combined image or use a mulled
-biocontainer (e.g. nf-core's `minimap2`+`samtools` mulled image).
+For the Illumina-metagenome path you only need `minimap2_samtools` (and only if
+you don't `--skip_host_removal`); for Nanopore you'll also need `dorado`.
 
-## Other-mode containers (scaffolds)
-Filled as local `.sif` placeholders for now: `fastplong`, `cleanifier`, `myloasm`,
-`autocycler`, `dorado`, `polypolish`, `dnaapler`, `shovill`, `chewbbaca`, `parsnp`,
-`fastani`. Most (shovill, fastplong, polypolish, dnaapler, chewbbaca, parsnp,
-fastani) are single biocontainers — swap them to quay URIs the same way when you
-build those workflows. `dorado`, `myloasm`, `autocycler`, `cleanifier` are bespoke.
+Caveats:
+- **Aviary** biocontainer carries the CLI but builds its own tool conda envs at
+  runtime — on an offline node you may prefer a self-contained image; override the
+  `AVIARY_.*` line if so.
+- **CHECKV_CLUSTER** uses the `blast` biocontainer plus the vendored stdlib
+  `anicalc.py`/`aniclust.py`; if that image lacks `python3`, point it at a small
+  blast+python image instead.
 
 ## Apptainer config
 
