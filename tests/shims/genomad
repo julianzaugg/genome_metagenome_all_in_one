@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "geNomad, version 1.7.4"
+exit 0

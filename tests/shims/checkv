@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "CheckV v1.0.1: assessing the quality of metagenome-assembled viral genomes"
+exit 0
