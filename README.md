@@ -25,14 +25,14 @@ bespoke tools use local `.sif` images on a shared path. See
 nextflow run . -profile test,local --mode illumina_metagenome \
   --input assets/samplesheets/illumina_metagenome.csv -stub
 
-# Real run on UQ Bunya
+# Real run on Bunya
 nextflow run . -profile bunya --mode illumina_metagenome \
   --input samplesheet.csv --outdir results
 ```
 
 ## Profiles
 
-- `bunya` — UQ Bunya HPC, SLURM executor, account `a_ace` (primary target).
+- `bunya` — Bunya HPC, SLURM executor, account `a_ace` (primary target).
 - `bunya_gpu` — adds H100 GPU resources for dorado steps (`gpu_cuda`, `gpu` qos).
 - `local` — the `/srv` Linux server (local executor).
 - `test` — tiny resources + bundled mini data for development.

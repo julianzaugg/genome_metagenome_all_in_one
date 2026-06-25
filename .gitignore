@@ -39,3 +39,4 @@ __pycache__/
 # Example dump is reference material, not pipeline source
 # (kept in repo intentionally; remove the next line to ignore it)
 # example_script_dump/
+example_script_dump/
