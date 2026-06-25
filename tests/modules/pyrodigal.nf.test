@@ -1,0 +1,26 @@
+nextflow_process {
+
+    name "PYRODIGAL (stub)"
+    script "modules/local/pyrodigal.nf"
+    process "PYRODIGAL"
+
+    test("predicts proteins/genes/gff from a scaffold set") {
+
+        options "-stub"
+
+        when {
+            process {
+                """
+                input[0] = [ [id:'sampleA', single_end:false], file("${projectDir}/tests/data/reads/sample_a_R1.fastq.gz") ]
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            assert process.out.faa.get(0).get(1) ==~ /.*sampleA\.faa/
+            assert process.out.gff
+            assert process.out.fna
+        }
+    }
+}

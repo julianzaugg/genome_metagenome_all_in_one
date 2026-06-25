@@ -1,0 +1,29 @@
+nextflow_pipeline {
+
+    name "illumina_metagenome (stub)"
+    script "main.nf"
+
+    test("illumina_metagenome stub run completes and produces numbered outputs") {
+
+        options "-stub"
+
+        when {
+            params {
+                mode   = "illumina_metagenome"
+                input  = "${projectDir}/assets/samplesheets/illumina_metagenome.csv"
+                outdir = "$outputDir"
+            }
+        }
+
+        then {
+            assert workflow.success
+            // key stages were scheduled
+            assert workflow.trace.tasks().any { it.name.contains('FASTP') }
+            assert workflow.trace.tasks().any { it.name.contains('SPADES') }
+            assert workflow.trace.tasks().any { it.name.contains('CHECKV_CLUSTER') }
+            // numbered output dirs exist
+            assert path("$outputDir/03_fastp").exists()
+            assert path("$outputDir/12_gene_catalogue").exists()
+        }
+    }
+}
