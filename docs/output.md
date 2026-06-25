@@ -1,33 +1,36 @@
 # Output
 
 Outputs are published under `--outdir` in numbered directories mirroring the
-bash-pipeline convention. Illumina metagenome layout:
+bash-pipeline convention. **Numbers run gaplessly in execution order, per mode** —
+they are not kept consistent across modes (each `--mode` is a separate run with
+its own output tree, so there's no reason to). Illumina metagenome layout:
 
 ```
-03_fastp/               # QC'd reads + reports
-04_sylph/               # sylph combined profile
-05_singlem/             # per-sample singlem profiles + OTU tables
-06_host_removed/        # host-filtered reads
-07_metaspades/          # assemblies (scaffolds)
-08_aviary/              # Aviary recovery (bins)
-09_dereplicated_bins/   # CoverM cluster: representatives/ + cluster_definition.tsv
-10_coverm_bins/         # per-sample abundance vs representatives
-11_pyrodigal/           # predicted proteins/genes per assembly
-12_gene_catalogue/      # cd-hit catalogue + membership table (provenance)
-13_dram/                # DRAM functional annotation of the catalogue
-14_gtdbtk/              # GTDB-Tk classification of representatives
-15_checkm2/  15_checkm1/ # bin completeness/contamination
-16_nonpareil/           # coverage redundancy (if --run_nonpareil)
-17_genomespot/          # growth predictions (if --run_genomespot)
-18_genomad/             # virus/plasmid prediction + pooled sequences
-19_checkv/              # CheckV quality of pooled viruses
-20_checkv_clustering/   # ANI clusters (virus + plasmid)
+01_fastp/               # QC'd reads + reports
+02_sylph/               # sylph combined profile
+03_singlem/             # per-sample singlem profiles + OTU tables
+04_host_removed/        # host-filtered reads
+05_metaspades/          # assemblies (scaffolds)
+06_aviary/              # Aviary recovery (bins)
+07_checkm2/             # bin completeness/contamination (drives dereplication)
+08_dereplicated_bins/   # CoverM cluster: representatives/ + cluster_definition.tsv
+09_coverm_bins/         # per-sample abundance vs representatives
+10_pyrodigal/           # predicted proteins/genes per assembly
+11_gene_catalogue/      # cd-hit catalogue + membership table (provenance)
+12_dram/                # DRAM functional annotation of the catalogue
+13_gtdbtk/              # GTDB-Tk classification of representatives
+14_checkm1/             # CheckM1 (if --run_checkm1)
+15_nonpareil/           # coverage redundancy (if --run_nonpareil)
+16_genomespot/          # growth predictions (if --run_genomespot)
+17_genomad/             # virus/plasmid prediction + pooled sequences
+18_checkv/              # CheckV quality of pooled viruses
+19_checkv_clustering/   # ANI clusters (virus + plasmid)
 pipeline_info/          # timeline / report / trace / dag
 ```
 
-Isolate modes reuse overlapping numbers with isolate-specific steps
-(`10_bakta`, `11_mlst`, `12_amrfinder`, `13_isescan`, `14_panaroo`,
-`15_parsnp`, `16_gubbins`, `17_fastani`, `18_chewbacca`, `19_tree`).
+The other modes get their own gapless `01..N` sequences when implemented (the
+isolate-track numbers currently in `conf/modules.config` are placeholders for
+the scaffolds).
 
 ## Provenance
 
