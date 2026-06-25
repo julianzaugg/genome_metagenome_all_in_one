@@ -1,0 +1,11 @@
+# Marks this repo as nf-core-*style* so `nf-core modules`/`nf-core subworkflows`
+# tooling works here, even though this is NOT a governed/registered nf-core pipeline.
+repository_type: pipeline
+nf_core_version: "3.0.2"
+# We intentionally diverge from full nf-core template linting (custom internal pipeline).
+lint:
+  files_exist: false
+  files_unchanged: false
+  nextflow_config: false
+  multiqc_config: false
+  readme: false

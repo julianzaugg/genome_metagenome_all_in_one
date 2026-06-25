@@ -1,0 +1,37 @@
+# Nextflow
+.nextflow*
+work/
+results*/
+.nf-test/
+.nf-test.log
+*.code-workspace
+
+# Apptainer/Singularity caches & images
+*.sif
+*.img
+singularity/
+apptainer/
+
+# Logs & reports
+*.log
+report*.html
+timeline*.html
+trace*.txt
+dag*.html
+pipeline_info/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Python / R
+__pycache__/
+*.pyc
+.Rhistory
+.RData
+
+# Example dump is reference material, not pipeline source
+# (kept in repo intentionally; remove the next line to ignore it)
+# example_script_dump/
