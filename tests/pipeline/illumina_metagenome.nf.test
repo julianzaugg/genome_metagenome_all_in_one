@@ -12,17 +12,22 @@ nextflow_pipeline {
                 mode   = "illumina_metagenome"
                 input  = "${projectDir}/assets/samplesheets/illumina_metagenome.csv"
                 outdir = "$outputDir"
+                skip_host_removal = true
             }
         }
 
         then {
             assert workflow.success
             // key stages were scheduled
+            assert workflow.trace.tasks().any { it.name.contains('SEQKIT_STATS') }
             assert workflow.trace.tasks().any { it.name.contains('FASTP') }
             assert workflow.trace.tasks().any { it.name.contains('SPADES') }
+            assert workflow.trace.tasks().any { it.name.contains('COVERM_CONTIG') }
             assert workflow.trace.tasks().any { it.name.contains('CHECKV_CLUSTER') }
             // numbered output dirs exist
-            assert path("$outputDir/03_fastp").exists()
+            assert path("$outputDir/00_read_stats").exists()
+            assert path("$outputDir/01_fastp").exists()
+            assert path("$outputDir/10_coverm_scaffolds").exists()
             assert path("$outputDir/12_gene_catalogue").exists()
         }
     }

@@ -109,3 +109,39 @@ process COVERM_GENOME {
     echo '"${task.process}": {coverm: stub}' > versions.yml
     """
 }
+
+process COVERM_CONTIG {
+    tag   { meta.id }
+    label 'process_high'
+
+    input:
+    tuple val(meta), path(reads), path(scaffolds)
+
+    output:
+    tuple val(meta), path("${meta.id}_counts.tsv"), emit: counts
+    tuple val(meta), path("*.bam"), optional: true, emit: bams
+    path 'versions.yml', emit: versions
+
+    script:
+    def args = task.ext.args ?: ''
+    def reads_arg = meta.single_end ? "--single ${reads}" : "-c ${reads[0]} ${reads[1]}"
+    """
+    coverm genome ${args} \\
+        --threads ${task.cpus} \\
+        --genome-fasta-files ${scaffolds} \\
+        --genome-fasta-extension fasta \\
+        --output-file ${meta.id}_counts.tsv \\
+        ${reads_arg}
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        coverm: \$(coverm --version 2>&1 | sed 's/coverm //')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    echo -e "Genome\\t${meta.id} Covered Fraction\\t${meta.id} Mean\\t${meta.id} Count" > ${meta.id}_counts.tsv
+    echo '"${task.process}": {coverm: stub}' > versions.yml
+    """
+}

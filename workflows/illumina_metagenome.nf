@@ -2,7 +2,8 @@
  * ILLUMINA_METAGENOME — full end-to-end workflow.
  *
  *  fastp QC ─┬─> sylph + singlem (read profiling, on raw reads)
- *            └─> host removal ─> metaSPAdes ─┬─> pyrodigal ─> gene catalogue ─> DRAM
+ *            └─> host removal ─> metaSPAdes ─┬─> CoverM mapping (per-sample scaffolds)
+ *                                            ├─> pyrodigal ─> gene catalogue ─> DRAM
  *                                            ├─> geNomad ─> CheckV ─> ANI cluster
  *                                            └─> Aviary binning ─> CheckM2
  *                                                  ─> CoverM dereplication
@@ -25,11 +26,12 @@ include { FASTP }                       from '../modules/nf-core/fastp/main'
 include { SPADES }                      from '../modules/nf-core/spades/main'
 include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict/main'
 include { PREP_ASSEMBLY }               from '../modules/local/util'
-include { AVIARY_RECOVER }              from '../modules/local/aviary'
-include { COVERM_CLUSTER; COVERM_GENOME } from '../modules/local/coverm'
+include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
+include { COVERM_CLUSTER; COVERM_GENOME; COVERM_CONTIG } from '../modules/local/coverm'
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
+include { SEQKIT_STATS }                from '../modules/local/read_stats'
 include { CLEANIFIER_INDEX }            from '../modules/local/host_removal'
 include { FASTQ_GZIP_TEST }             from '../modules/local/validate'
 
@@ -43,11 +45,13 @@ workflow ILLUMINA_METAGENOME {
     INPUT_CHECK(params.input, params.mode)
     FASTQ_GZIP_TEST(INPUT_CHECK.out.reads_short)
     ch_reads = FASTQ_GZIP_TEST.out.reads
+    ch_read_stats = ch_reads.map { meta, reads -> [ meta, 'raw', reads ] }
 
     // --- QC ---
     if (!params.skip_qc) {
         FASTP(ch_reads.map { meta, reads -> [ meta, reads, [] ] }, false, false, false)
         ch_qc = FASTP.out.reads
+        ch_read_stats = ch_read_stats.mix(FASTP.out.reads.map { meta, reads -> [ meta, 'fastp', reads ] })
     } else {
         ch_qc = ch_reads
     }
@@ -79,9 +83,12 @@ workflow ILLUMINA_METAGENOME {
         }
         HOST_REMOVAL(ch_qc, ch_cleanifier_index)
         ch_clean = HOST_REMOVAL.out.reads
+        ch_read_stats = ch_read_stats.mix(HOST_REMOVAL.out.reads.map { meta, reads -> [ meta, 'cleanifier', reads ] })
     } else {
         ch_clean = ch_qc
     }
+
+    SEQKIT_STATS(ch_read_stats)
 
     // --- Assembly (metaSPAdes) ---
     ch_assembly = Channel.empty()
@@ -89,6 +96,15 @@ workflow ILLUMINA_METAGENOME {
         SPADES(ch_clean.map { meta, reads -> [ meta, reads, [], [] ] }, [], [])
         PREP_ASSEMBLY(SPADES.out.scaffolds)
         ch_assembly = PREP_ASSEMBLY.out.assembly    // [ meta, scaffolds.fasta ]
+    }
+
+    // --- Map QC'd reads to each sample's assembled scaffolds ---
+    if (!params.skip_assembly && !params.skip_read_mapping) {
+        COVERM_CONTIG(
+            ch_assembly
+                .join(ch_clean)
+                .map { meta, scaffolds, reads -> [ meta, reads, scaffolds ] }
+        )
     }
 
     // --- Binning (Aviary) ---
@@ -100,8 +116,10 @@ workflow ILLUMINA_METAGENOME {
             file(params.checkm2_db, checkIfExists: true),
             file(params.eggnog_db,  checkIfExists: true)
         )
-        // all bins across samples, flattened for cross-sample steps
-        ch_all_bins = AVIARY_RECOVER.out.bins.map { meta, bins -> bins }.flatten().collect()
+        // all renamed bins across samples; this is the canonical bin set for
+        // CheckM, dereplication, read mapping, and downstream taxonomy/QC.
+        AVIARY_COLLECT_BINS(AVIARY_RECOVER.out.bins.map { meta, bins -> bins }.flatten().collect())
+        ch_all_bins = AVIARY_COLLECT_BINS.out.bins
 
         // CheckM on ALL bins (pre-dereplication). CheckM2 drives clustering; both
         // CheckM1 and CheckM2 feed the high-quality-representative selection.
@@ -127,7 +145,7 @@ workflow ILLUMINA_METAGENOME {
                                 .map { f -> [ [id: f.baseName], f ] }
         } else {
             ch_reps    = ch_all_bins
-            ch_per_rep = AVIARY_RECOVER.out.bins.transpose().map { m, b -> [ [id: b.baseName], b ] }
+            ch_per_rep = AVIARY_COLLECT_BINS.out.bins.flatten().map { b -> [ [id: b.baseName], b ] }
         }
 
         // --- Map QC'd reads to representatives ---

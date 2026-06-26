@@ -19,9 +19,11 @@ process AVIARY_RECOVER {
     path(eggnog_db)
 
     output:
-    tuple val(meta), path("${meta.id}/bins/**/*.fasta"), emit: bins
-    tuple val(meta), path("${meta.id}"),                 emit: recover_dir
-    path 'versions.yml',                                 emit: versions
+    tuple val(meta), path("${meta.id}/renamed_bins/*.fasta"),             emit: bins
+    tuple val(meta), path("${meta.id}/renamed_bins/bin_contig_list.tsv"), emit: bin_contig_list
+    tuple val(meta), path("${meta.id}/bins/**/*.fasta", optional: true),  emit: raw_bins
+    tuple val(meta), path("${meta.id}"),                                  emit: recover_dir
+    path 'versions.yml',                                                  emit: versions
 
     script:
     def args   = task.ext.args ?: '--skip-singlem'
@@ -42,6 +44,42 @@ process AVIARY_RECOVER {
         --checkm2-db-path ${checkm2_db} \\
         --eggnog-db-path ${eggnog_db}
 
+    mkdir -p ${meta.id}/renamed_bins
+    shopt -s nullglob
+    for bin_file in ${meta.id}/bins/final_bins/*.{fna,fa,fasta}; do
+        bin_file_basename=\$(basename "\$bin_file")
+        bin_file_basename="\${bin_file_basename%.fasta}"
+        bin_file_basename="\${bin_file_basename%.fna}"
+        bin_file_basename="\${bin_file_basename%.fa}"
+        bin_file_basename="\${bin_file_basename%.tsv}"
+
+        binner=\$(echo "\$bin_file_basename" | awk -F "." '{print \$1}' | sed 's/_bins\$//')
+        bin_number=\$(echo "\$bin_file_basename" | awk -F "." '{print \$2}')
+
+        if [[ "\$bin_file_basename" == *"rosella_dastool_refined"* ]]; then
+            bin_number="\${bin_file_basename#*refined_}"
+            binner="rosella_dastool_refined"
+        fi
+        if [[ "\$bin_file_basename" == *"single_contig_dastool_refined"* ]]; then
+            bin_number="\${bin_file_basename#*refined_}"
+            binner="single_contig_dastool_refined"
+        fi
+
+        if [[ -n "\$bin_number" ]]; then
+            bin_out_name="\${binner}.\${bin_number}"
+        else
+            bin_out_name="\${binner}"
+        fi
+
+        cp -L "\$bin_file" "${meta.id}/renamed_bins/${meta.id}.\${bin_out_name}.fasta"
+    done
+
+    : > ${meta.id}/renamed_bins/bin_contig_list.tsv
+    for i in ${meta.id}/renamed_bins/*.fasta; do
+        name=\$(basename "\$i" .fasta)
+        grep '^>' "\$i" | sed "s/^>/\${name}\\t/" >> ${meta.id}/renamed_bins/bin_contig_list.tsv
+    done
+
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         aviary: \$(aviary --version 2>&1 | head -1)
@@ -51,8 +89,52 @@ process AVIARY_RECOVER {
     stub:
     """
     mkdir -p ${meta.id}/bins/final_bins
-    echo ">contig1" > ${meta.id}/bins/final_bins/${meta.id}_bin.1.fasta
-    echo "ACGTACGT" >> ${meta.id}/bins/final_bins/${meta.id}_bin.1.fasta
+    echo ">contig1" > ${meta.id}/bins/final_bins/metabat2_refined.001.fasta
+    echo "ACGTACGT" >> ${meta.id}/bins/final_bins/metabat2_refined.001.fasta
+    mkdir -p ${meta.id}/renamed_bins
+    cp ${meta.id}/bins/final_bins/metabat2_refined.001.fasta ${meta.id}/renamed_bins/${meta.id}.metabat2_refined.001.fasta
+    echo -e "${meta.id}.metabat2_refined.001\\tcontig1" > ${meta.id}/renamed_bins/bin_contig_list.tsv
     echo '"${task.process}": {aviary: stub}' > versions.yml
+    """
+}
+
+process AVIARY_COLLECT_BINS {
+    label 'process_low'
+
+    input:
+    path(bins, stageAs: 'input_bins/*')
+
+    output:
+    path 'all_aviary_bins/*.fasta',          emit: bins
+    path 'all_aviary_bins/bin_contig_list.tsv', emit: bin_contig_list
+    path 'versions.yml',                     emit: versions
+
+    script:
+    """
+    mkdir -p all_aviary_bins
+    cp -L input_bins/*.fasta all_aviary_bins/
+
+    : > all_aviary_bins/bin_contig_list.tsv
+    for i in all_aviary_bins/*.fasta; do
+        name=\$(basename "\$i" .fasta)
+        grep '^>' "\$i" | sed "s/^>/\${name}\\t/" >> all_aviary_bins/bin_contig_list.tsv
+    done
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        bash: \$(bash --version | head -1 | sed 's/GNU bash, version //')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    mkdir -p all_aviary_bins
+    cp -L input_bins/*.fasta all_aviary_bins/
+    : > all_aviary_bins/bin_contig_list.tsv
+    for i in all_aviary_bins/*.fasta; do
+        name=\$(basename "\$i" .fasta)
+        grep '^>' "\$i" | sed "s/^>/\${name}\\t/" >> all_aviary_bins/bin_contig_list.tsv
+    done
+    echo '"${task.process}": {bash: stub}' > versions.yml
     """
 }
