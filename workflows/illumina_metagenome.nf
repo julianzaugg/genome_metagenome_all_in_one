@@ -72,7 +72,7 @@ workflow ILLUMINA_METAGENOME {
             if (!params.host_ref) {
                 error "Host removal is enabled but neither --cleanifier_db nor --host_ref is set. Provide a Cleanifier .filter index, provide a FASTA with --host_ref to build one, or rerun with --skip_host_removal true."
             }
-            CLEANIFIER_INDEX(file(params.host_ref, checkIfExists: true), params.cleanifier_nobjects)
+            CLEANIFIER_INDEX(file(params.host_ref, checkIfExists: true), params.cleanifier_nobjects ?: '')
             ch_cleanifier_index = CLEANIFIER_INDEX.out.index
         }
         HOST_REMOVAL(ch_qc, ch_cleanifier_index)
