@@ -43,9 +43,9 @@ Caveats:
 - **Aviary** biocontainer carries the CLI but builds its own tool conda envs at
   runtime — on an offline node you may prefer a self-contained image; override the
   `AVIARY_.*` line if so.
-- **CHECKV_CLUSTER** uses the `blast` biocontainer plus the vendored stdlib
-  `anicalc.py`/`aniclust.py`; if that image lacks `python3`, point it at a small
-  blast+python image instead.
+- **CHECKV_CLUSTER** uses the same Galaxy CheckV SIF as `CHECKV_ENDTOEND` for
+  blast+ plus the vendored stdlib `anicalc.py`/`aniclust.py`. The standalone
+  `blast` image does not ship Python in all builds.
 
 ## Apptainer config
 
