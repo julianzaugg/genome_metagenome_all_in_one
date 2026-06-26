@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 Greedy, UCLUST-like clustering of sequences from an ANI table.
 
