@@ -39,4 +39,4 @@ nextflow run . -profile bunya --mode <mode> --input samplesheet.csv --outdir res
 - Provide `.sif` paths for bespoke tools — `docs/containers.md`.
 - Set DB params (GTDB-Tk, CheckM2, singlem, bakta, DRAM, geNomad, CheckV, host) or
   run `--mode download_dbs` — `docs/databases.md`.
-- Confirm Bunya account/partition/qos and `apptainer.cacheDir` in `conf/bunya*.config`.
+- Confirm Bunya account/partition/qos in `conf/bunya*.config`.

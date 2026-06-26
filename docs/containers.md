@@ -6,10 +6,9 @@ This pipeline is **containers-only** (Apptainer). Two sources:
    directive — pulled from a registry and converted by Apptainer on first use.
    Override any of them with a `withName` block in `conf/containers.config`.
 
-2. **Bespoke local modules** use local `.sif` images under `params.container_base`
-   (set per profile: `/scratch/project/a_ace/containers` on Bunya,
-   `/srv/db/containers` locally). Mapped in `conf/containers.config` as
-   `"${params.container_base}/<name>.sif"`.
+2. **Bespoke local modules** use local `.sif` images under `params.container_base`.
+   The `local` and `bunya` profiles default this to `${projectDir}/containers`.
+   Mapped in `conf/containers.config` as `"${params.container_base}/<name>.sif"`.
 
 ### Auto-pulled from quay.io biocontainers — nothing to build
 Nearly every tool is wired to a quay.io biocontainer in `conf/containers.config`
@@ -35,9 +34,10 @@ or a FASTA with `--host_ref` so the pipeline can build the index. For Nanopore
 you'll need `dorado`.
 
 > These local-`.sif` entries use `${params.container_base}`, which is only set by a
-> profile (e.g. `-profile local` → `/srv/db/containers`). If you run without that
-> profile, `container_base` is null and the path resolves to `null/...` — so always
-> select the profile, or set `--container_base` explicitly, when a step needs one.
+> profile (e.g. `-profile local` → `<projectDir>/containers`). If you run without
+> that profile, `container_base` is null and the path resolves to `null/...` — so
+> always select the profile, or set `--container_base` explicitly, when a step
+> needs one.
 
 Caveats:
 - **Aviary** biocontainer carries the CLI but builds its own tool conda envs at
@@ -49,6 +49,8 @@ Caveats:
 
 ## Apptainer config
 
-`apptainer.enabled = true` and `autoMounts = true` are set globally;
-`apptainer.cacheDir` is set per profile. The `bunya_gpu` profile adds
-`apptainer.runOptions = '--nv'` for GPU passthrough (dorado).
+`apptainer.enabled = true` and `autoMounts = true` are set globally. The `local`
+and `bunya` profiles set `apptainer.cacheDir` to `${projectDir}/.apptainer_cache`,
+so auto-pulled images are cached beside the checked-out pipeline. The
+`bunya_gpu` profile adds `apptainer.runOptions = '--nv'` for GPU passthrough
+(dorado).

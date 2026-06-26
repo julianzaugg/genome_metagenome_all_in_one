@@ -13,6 +13,8 @@ results_test/
 # Apptainer/Singularity caches & images
 *.sif
 *.img
+containers/
+.apptainer_cache/
 singularity/
 apptainer/
 

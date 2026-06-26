@@ -14,8 +14,8 @@ one-off settings on the command line.
 | **`conf/base.config`** | Resource **labels** — how many CPUs/memory/time each `process_low/medium/high/maxmem/gpu` tier gets, and retry behaviour. | To tune resources for your hardware. |
 | **`conf/modules.config`** | Per-process **tool flags** (`ext.args`) and **output locations** (`publishDir`, the numbered dirs). | To change a tool's flags or where outputs land. **This is where tool options live — never hard-code them in a module.** |
 | **`conf/containers.config`** | Per-process **container image** (quay.io URI or local `.sif`). | To change an image version/source, or point a bespoke tool at your `.sif`. |
-| **`conf/local.config`** | The **`local` profile** — your `/srv` server: executor, CPU/mem ceilings, `container_base`, Apptainer cache, and **database paths**. | **Yes — this is your main setup file for the local server.** |
-| **`conf/bunya.config`** / **`conf/bunya_gpu.config`** | The **`bunya`** profiles — SLURM account/partition/qos, cache dir, GPU options. | Yes, if you run on Bunya (confirm account/qos). |
+| **`conf/local.config`** | The **`local` profile** — your `/srv` server: executor, CPU/mem ceilings, project-local container/cache paths, and **database paths**. | **Yes — this is your main setup file for the local server.** |
+| **`conf/bunya.config`** / **`conf/bunya_gpu.config`** | The **`bunya`** profiles — SLURM account/partition/qos, project-local container/cache paths, GPU options. | Yes, if you run on Bunya (confirm account/qos). |
 | **`conf/test.config`** | The **`test`** profile — tiny resources + stub data for `-stub` wiring checks. | No (leave as-is). |
 | **`assets/schema_input.json`** | Allowed **samplesheet** columns + validation. | Only if you change the samplesheet format. |
 | **`docs/*.md`** | Documentation only. | Editing these changes **nothing** in the pipeline. |
@@ -32,12 +32,13 @@ one-off settings on the command line.
 | Give a step **more CPU/RAM/time** | `conf/base.config` (its `withLabel` tier) — or `--max_cpus/--max_memory` |
 | Turn a **step on/off** | a `--skip_*` / `--run_*` flag (see `nextflow run . --help`) |
 | Set **SLURM account/partition** | `conf/bunya.config` |
-| Where bespoke **`.sif` images live** | `conf/local.config` / `conf/bunya.config` (`container_base`) |
+| Where bespoke **`.sif` images live** | `conf/local.config` / `conf/bunya.config` (`container_base`, default `<projectDir>/containers`) |
 
 ## Minimum setup to run on the local server
 
-1. **`conf/local.config`** — confirm the DB paths (pre-filled to `/srv/db/...`),
-   `container_base`, `apptainer.cacheDir`, and the CPU/mem ceilings.
+1. **`conf/local.config`** — confirm the DB paths (pre-filled to `/srv/db/...`)
+   and the CPU/mem ceilings. Container images default to project-local
+   `containers/` and `.apptainer_cache/`.
 2. **Host removal** — because `--skip_host_removal false` is the default, set
    either `cleanifier_db` to a prebuilt `.filter` index or `host_ref` to a FASTA
    that Cleanifier can index. For one-off runs, pass `--host_ref` or
@@ -58,8 +59,9 @@ instead of `--host_ref`.
 
 ## Minimum setup to run on Bunya
 
-1. **`conf/bunya.config`** — confirm `--account`, queue/partition, `container_base`,
-   `apptainer.cacheDir`, and resource ceilings for your allocation.
+1. **`conf/bunya.config`** — confirm `--account`, queue/partition and resource
+   ceilings for your allocation. Container images default to project-local
+   `containers/` and `.apptainer_cache/`.
 2. **Database paths** — Bunya jobs cannot use `/srv/db` unless that path is mounted
    on the cluster. Pass Bunya-visible paths on the command line, or create a small
    site/profile config that overrides the DB params from [databases.md](databases.md).
