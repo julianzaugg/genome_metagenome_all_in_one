@@ -53,16 +53,18 @@ folder). Examples:
 
 ### sylph-tax taxonomy
 
-Set **`--sylph_tax_metadata`** to a glob of the `*_metadata.tsv.gz` files to run
-the taxonomy chain after profiling (`sylph-tax taxprof` → `sylph-tax merge`),
-producing `merged_relative_abundance.tsv` and `merged_sequence_abundance.tsv` in
-`02_sylph/`. Leave it `null` to run `sylph profile` only.
+Set **`--sylph_tax_metadata`** to metadata matching the `.syldb` files selected
+by `--sylph_db` to run the taxonomy chain after profiling (`sylph-tax taxprof`
+→ `sylph-tax merge`), producing `merged_relative_abundance.tsv` and
+`merged_sequence_abundance.tsv` in `02_sylph/`. Leave it `null` to run
+`sylph profile` only.
 
 ```bash
---sylph_tax_metadata '/srv/db/sylph/*_metadata.tsv.gz'
+--sylph_tax_metadata '/srv/db/sylph/gtdb_r232_metadata.tsv.gz'
 ```
-The metadata should correspond to the `.syldb` files in `--sylph_db` (extra
-metadata is harmless). `conf/local.config` pre-sets this to `/srv/db/sylph/*_metadata.tsv.gz`.
+For multi-DB runs, use a glob or list that covers exactly the selected databases,
+for example GTDB r232 plus fungi. `conf/local.config` pre-sets this to
+`/srv/db/sylph/gtdb_r232_metadata.tsv.gz`.
 
 Tools that read DB locations from environment variables
 (`GTDBTK_DATA_PATH`, `CHECKM2_DATA_PATH`, `SINGLEM_METAPACKAGE_PATH`,

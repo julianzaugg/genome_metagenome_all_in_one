@@ -58,7 +58,7 @@
                 "checkm1_db":          { "type": "string", "description": "CheckM1 database dir." },
                 "singlem_metapackage": { "type": "string", "description": "SingleM metapackage (SINGLEM_METAPACKAGE_PATH)." },
                 "sylph_db":            { "type": "string", "description": "Sylph database — path or glob of the .syldb file(s) to profile against." },
-                "sylph_tax_metadata":  { "type": "string", "description": "Glob of sylph-tax *_metadata.tsv.gz files; set to enable the taxonomy + merge step." },
+                "sylph_tax_metadata":  { "type": "string", "description": "sylph-tax metadata path/glob matching the selected sylph_db files; set to enable taxonomy + merge." },
                 "bakta_db":            { "type": "string", "description": "Bakta database dir." },
                 "dram_db":             { "type": "string", "description": "DRAM database dir." },
                 "genomad_db":          { "type": "string", "description": "geNomad database dir." },
