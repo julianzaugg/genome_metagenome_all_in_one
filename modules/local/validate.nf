@@ -26,9 +26,17 @@ process FASTQ_GZIP_TEST {
         exit 1
     fi
 
+    if ! seqkit stats --tabular ${quoted_files} >/dev/null; then
+        echo "[FASTQ_GZIP_TEST] Sample ${meta.id} has malformed FASTQ records: ${file_names}" >&2
+        echo "[FASTQ_GZIP_TEST] This can later appear as SingleM/DIAMOND 'Unexpected line format' errors." >&2
+        echo "[FASTQ_GZIP_TEST] Re-copy/re-download the file(s), then resume the pipeline." >&2
+        exit 1
+    fi
+
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         gzip: \$(gzip --version 2>&1 | head -n 1)
+        seqkit: \$(seqkit version 2>&1 | sed 's/^seqkit //')
     END_VERSIONS
     """
 
@@ -37,6 +45,7 @@ process FASTQ_GZIP_TEST {
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         gzip: stub
+        seqkit: stub
     END_VERSIONS
     """
 }
