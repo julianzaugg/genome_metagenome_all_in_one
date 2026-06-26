@@ -1,7 +1,7 @@
 /*
- * READ_PROFILING — sylph (+ sylph-tax) + singlem from QC'd reads.
+ * READ_PROFILING — sylph (+ sylph-tax) + singlem from raw reads.
  * sylph: per-sample sketch -> single combined profile -> taxonomy + merge.
- * singlem: per-sample pipe.
+ * singlem: one multi-sample pipe call over all samples.
  */
 
 include { SYLPH_SKETCH; SYLPH_PROFILE; SYLPH_TAX } from '../../modules/local/sylph'
@@ -22,6 +22,7 @@ workflow READ_PROFILING {
     ch_sylph_rel     = Channel.empty()
     ch_sylph_seq     = Channel.empty()
     ch_singlem       = Channel.empty()
+    ch_read_sets     = reads.collect()
 
     if (run_sylph) {
         SYLPH_SKETCH(reads)
@@ -37,7 +38,13 @@ workflow READ_PROFILING {
     }
 
     if (run_singlem) {
-        SINGLEM_PIPE(reads, singlem_metapackage)
+        ch_singlem_forward = ch_read_sets.map { rows ->
+            rows.collect { meta, r -> meta.single_end ? r : r[0] }
+        }
+        ch_singlem_reverse = ch_read_sets.map { rows ->
+            rows.findAll { meta, r -> !meta.single_end }.collect { meta, r -> r[1] }
+        }
+        SINGLEM_PIPE(ch_singlem_forward, ch_singlem_reverse, singlem_metapackage)
         ch_singlem = SINGLEM_PIPE.out.profile
     }
 

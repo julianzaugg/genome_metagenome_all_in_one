@@ -8,7 +8,7 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 ```
 01_fastp/               # QC'd reads + reports
 02_sylph/               # sylph combined profile
-03_singlem/             # per-sample singlem profiles + OTU tables
+03_singlem/             # multi-sample SingleM profile + OTU table
 04_host_removed/        # host-filtered reads
 05_metaspades/          # assemblies (scaffolds)
 06_aviary/              # Aviary recovery (bins)
