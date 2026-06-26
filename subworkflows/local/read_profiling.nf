@@ -22,7 +22,7 @@ workflow READ_PROFILING {
     ch_sylph_rel     = Channel.empty()
     ch_sylph_seq     = Channel.empty()
     ch_singlem       = Channel.empty()
-    ch_read_sets     = reads.collect()
+    ch_read_sets     = reads.collect(flat: false)
 
     if (run_sylph) {
         SYLPH_SKETCH(reads)
@@ -39,10 +39,14 @@ workflow READ_PROFILING {
 
     if (run_singlem) {
         ch_singlem_forward = ch_read_sets.map { rows ->
-            rows.collect { meta, r -> meta.single_end ? r : r[0] }
+            rows.collect { row ->
+                def meta = row[0]
+                def r    = row[1]
+                meta.single_end ? r : r[0]
+            }
         }
         ch_singlem_reverse = ch_read_sets.map { rows ->
-            rows.findAll { meta, r -> !meta.single_end }.collect { meta, r -> r[1] }
+            rows.findAll { row -> !row[0].single_end }.collect { row -> row[1][1] }
         }
         SINGLEM_PIPE(ch_singlem_forward, ch_singlem_reverse, singlem_metapackage)
         ch_singlem = SINGLEM_PIPE.out.profile
