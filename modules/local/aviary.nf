@@ -32,6 +32,7 @@ process AVIARY_RECOVER {
     export GTDBTK_DATA_PATH=${gtdb_db}
     export CHECKM2_DATA_PATH=${checkm2_db}
     export EGGNOG_DATA_DIR=${eggnog_db}
+    export SINGLEM_METAPACKAGE_PATH=\${SINGLEM_METAPACKAGE_PATH:-not_required_with_skip_singlem}
 
     aviary recover ${args} \\
         --assembly ${assembly} \\
