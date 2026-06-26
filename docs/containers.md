@@ -29,8 +29,9 @@ Only three — tools not packaged on biocontainers, or needing two tools togethe
 | `dorado_1.4.0`         | ONT-proprietary, not on biocontainers | Nanopore basecall/polish |
 | `genomespot_1.0`       | not packaged on biocontainers | bin growth prediction (optional) |
 
-For the **Illumina-metagenome path you need no local builds** — host removal uses a
-combined minimap2+samtools Seqera Wave image. For Nanopore you'll need `dorado`.
+For the **Illumina-metagenome path you need no local builds** — host removal uses
+the `cleanifier` biocontainer (you must supply its `--cleanifier_db` index). For
+Nanopore you'll need `dorado`.
 
 > These local-`.sif` entries use `${params.container_base}`, which is only set by a
 > profile (e.g. `-profile local` → `/srv/db/containers`). If you run without that

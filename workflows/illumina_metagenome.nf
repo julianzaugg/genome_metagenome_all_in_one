@@ -65,7 +65,7 @@ workflow ILLUMINA_METAGENOME {
 
     // --- Host removal ---
     if (!params.skip_host_removal) {
-        HOST_REMOVAL(ch_qc, optpath(params.host_ref), optpath(params.cleanifier_db))
+        HOST_REMOVAL(ch_qc, optpath(params.cleanifier_db))
         ch_clean = HOST_REMOVAL.out.reads
     } else {
         ch_clean = ch_qc
