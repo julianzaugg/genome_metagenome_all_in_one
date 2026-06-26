@@ -86,6 +86,7 @@
                 "skip_dereplication":   { "type": "boolean" },
                 "skip_read_mapping":    { "type": "boolean" },
                 "skip_gene_catalogue":  { "type": "boolean" },
+                "skip_rpkm":            { "type": "boolean" },
                 "skip_annotation":      { "type": "boolean" },
                 "skip_taxonomy":        { "type": "boolean" },
                 "skip_checkm":          { "type": "boolean" },
@@ -102,6 +103,7 @@
             "properties": {
                 "catalogue_clusterer": { "type": "string", "enum": ["cdhit", "mmseqs"], "default": "cdhit" },
                 "catalogue_identities": { "type": "string", "default": "1.0,0.9", "description": "Comma-separated CD-HIT identities; first is the primary catalogue (used for CDS/membership/DRAM)." },
+                "rpkm_min_read_length": { "type": "integer", "default": 140, "description": "Minimum selected R1 read length retained for RPKM DIAMOND blastx." },
                 "core_alignment":      { "type": "string", "enum": ["parsnp", "snippy"], "default": "parsnp" },
                 "tree_builder":        { "type": "string", "enum": ["iqtree", "raxml"], "default": "iqtree" }
             }

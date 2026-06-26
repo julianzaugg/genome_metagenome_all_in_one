@@ -24,11 +24,17 @@ nextflow_pipeline {
             assert workflow.trace.tasks().any { it.name.contains('SPADES') }
             assert workflow.trace.tasks().any { it.name.contains('COVERM_CONTIG') }
             assert workflow.trace.tasks().any { it.name.contains('CHECKV_CLUSTER') }
+            assert workflow.trace.tasks().any { it.name.contains('RPKM_CALCULATE') }
             // numbered output dirs exist
             assert path("$outputDir/00_read_stats").exists()
             assert path("$outputDir/01_fastp").exists()
             assert path("$outputDir/10_coverm_scaffolds").exists()
             assert path("$outputDir/12_gene_catalogue").exists()
+            assert path("$outputDir/22_rpkm").exists()
+            assert path("$outputDir/22_rpkm/singlem_sample_rpkm.tsv").exists()
+            assert path("$outputDir/22_rpkm/singlem_rpkm_means.tsv").exists()
+            assert path("$outputDir/22_rpkm/gene_catalogue_rpkm_per_gene_normalised.tsv").exists()
+            assert path("$outputDir/22_rpkm/gene_catalogue_mapped_reads_per_gene.tsv").exists()
         }
     }
 }

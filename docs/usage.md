@@ -57,6 +57,11 @@ Host removal is on by default. Keep it on for normal Illumina-metagenome runs an
 provide either `--cleanifier_db` or `--host_ref`; use `--skip_host_removal true`
 only when you deliberately want assembly from QC'd, unfiltered reads.
 
+RPKM is on by default for Illumina metagenomes and requires fastp, assembly, and
+the gene catalogue. It uses one selected R1 stream: fastp + host-filtered reads
+when host removal runs, otherwise fastp reads. Tune the DIAMOND input length
+filter with `--rpkm_min_read_length` or disable the stage with `--skip_rpkm true`.
+
 Raw gzipped FASTQs are checked before QC/read profiling with `gzip -t` and
 `seqkit stats`. SingleM `Unexpected line format for DIAMOND output line` errors
 can indicate corrupt or malformed FASTQ input, so fix the source reads and resume.

@@ -28,6 +28,7 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 19_genomad/             # virus/plasmid prediction + pooled seqs/proteins/genes/summary
 20_checkv/              # CheckV quality of pooled viruses
 21_checkv_clustering/   # ANI clusters (virus + plasmid)
+22_rpkm/                # SingleM-normalized RPKM for the gene catalogue
 pipeline_info/          # timeline / report / trace / dag
 ```
 
@@ -50,5 +51,11 @@ the scaffolds).
   representative.
 - `12_gene_catalogue/gene_catalogue_membership.tsv` — which predicted gene
   (namespaced `<sample>___<gene>`) maps to each catalogue cluster.
+- `22_rpkm/gene_catalogue_rpkm_per_gene_normalised.tsv` — gene-catalogue RPKM
+  normalized by each sample's mean SingleM marker-gene RPKM.
+- `22_rpkm/gene_catalogue_mapped_reads_per_gene.tsv` — selected R1 DIAMOND read
+  counts per catalogue gene and sample.
+- `22_rpkm/singlem_sample_rpkm.tsv` and `22_rpkm/singlem_rpkm_means.tsv` —
+  marker-level and per-sample SingleM normalization values.
 
 Paths/numbers are set in `conf/modules.config` and easily changed.

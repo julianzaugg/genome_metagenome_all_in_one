@@ -21,6 +21,7 @@ include { HOST_REMOVAL }       from '../subworkflows/local/host_removal'
 include { GENE_CATALOGUE }     from '../subworkflows/local/gene_catalogue'
 include { GENOME_TAXONOMY_QC } from '../subworkflows/local/genome_taxonomy_qc'
 include { MOBILE_ELEMENTS }    from '../subworkflows/local/mobile_elements'
+include { RPKM }               from '../subworkflows/local/rpkm'
 
 include { FASTP }                       from '../modules/nf-core/fastp/main'
 include { SPADES }                      from '../modules/nf-core/spades/main'
@@ -41,6 +42,12 @@ def optpath = { p -> p ? file(p, checkIfExists: true) : [] }
 workflow ILLUMINA_METAGENOME {
 
     if (!params.input) { error "Mode 'illumina_metagenome' requires --input <samplesheet.csv>" }
+    if (!params.skip_rpkm && params.skip_qc) {
+        error "RPKM is enabled but --skip_qc true would bypass fastp. Run fastp or rerun with --skip_rpkm true."
+    }
+    if (!params.skip_rpkm && (params.skip_assembly || params.skip_gene_catalogue)) {
+        error "RPKM requires assembly and the gene catalogue. Rerun with --skip_assembly false --skip_gene_catalogue false, or set --skip_rpkm true."
+    }
 
     INPUT_CHECK(params.input, params.mode)
     FASTQ_GZIP_TEST(INPUT_CHECK.out.reads_short)
@@ -174,6 +181,17 @@ workflow ILLUMINA_METAGENOME {
             params.catalogue_identities,
             optpath(params.dram_db),
             !params.skip_annotation
+        )
+    }
+
+    // --- RPKM (selected stream only: host-filtered fastp reads, or fastp reads if host removal is skipped) ---
+    if (!params.skip_rpkm) {
+        ch_rpkm_r1 = ch_clean.map { meta, reads -> [ meta, meta.single_end ? reads : reads[0] ] }
+        RPKM(
+            ch_rpkm_r1,
+            GENE_CATALOGUE.out.catalogue,
+            file(params.singlem_metapackage, checkIfExists: true),
+            params.rpkm_min_read_length
         )
     }
 
