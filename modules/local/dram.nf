@@ -19,8 +19,12 @@ process DRAM_ANNOTATE {
     script:
     def args = task.ext.args ?: ''
     """
-    # DRAM reads DB locations from its config; point it at the provided db dir.
-    export DRAM_CONFIG_LOCATION=${dram_db}/CONFIG
+    # DRAM reads DB locations from its config. Some installs keep CONFIG
+    # outside the database directory, so only override it for prepared DB dirs
+    # that actually carry their own CONFIG file.
+    if [[ -f "${dram_db}/CONFIG" ]]; then
+        export DRAM_CONFIG_LOCATION="${dram_db}/CONFIG"
+    fi
 
     DRAM.py annotate_genes ${args} \\
         --input_faa ${proteins} \\
