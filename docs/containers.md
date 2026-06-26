@@ -28,10 +28,14 @@ Only three — tools not packaged on biocontainers, or needing two tools togethe
 |------------------------|-------------------|---------|
 | `dorado_1.4.0`         | ONT-proprietary, not on biocontainers | Nanopore basecall/polish |
 | `genomespot_1.0`       | not packaged on biocontainers | bin growth prediction (optional) |
-| `minimap2_samtools`    | needs minimap2 **+** samtools together | host removal (optional) |
 
-For the Illumina-metagenome path you only need `minimap2_samtools` (and only if
-you don't `--skip_host_removal`); for Nanopore you'll also need `dorado`.
+For the **Illumina-metagenome path you need no local builds** — host removal uses a
+combined minimap2+samtools Seqera Wave image. For Nanopore you'll need `dorado`.
+
+> These local-`.sif` entries use `${params.container_base}`, which is only set by a
+> profile (e.g. `-profile local` → `/srv/db/containers`). If you run without that
+> profile, `container_base` is null and the path resolves to `null/...` — so always
+> select the profile, or set `--container_base` explicitly, when a step needs one.
 
 Caveats:
 - **Aviary** biocontainer carries the CLI but builds its own tool conda envs at
