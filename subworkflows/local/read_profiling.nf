@@ -10,7 +10,7 @@ include { SINGLEM_PIPE }                from '../../modules/local/singlem'
 workflow READ_PROFILING {
     take:
     reads               // [ meta, reads ]
-    sylph_db            // path
+    sylph_db            // collected list of .syldb files
     singlem_metapackage // path
     run_sylph           // bool
     run_singlem         // bool

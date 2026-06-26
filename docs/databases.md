@@ -9,7 +9,7 @@ Override per profile (Bunya paths differ from `/srv`) or on the command line.
 | `--checkm2_db`          | CheckM2, Aviary    | `/srv/db/checkm2_data/1.0.2/CheckM2_database` |
 | `--checkm1_db`          | CheckM1            | `/srv/db/checkm1` |
 | `--singlem_metapackage` | SingleM            | `/srv/db/singlem_packages/S5.4.0...smpkg.zb` |
-| `--sylph_db`            | sylph              | `/srv/db/sylph/gtdb-r226` (dir of `*.syldb`) |
+| `--sylph_db`            | sylph              | path/glob of the `.syldb` file(s) to use (see note) |
 | `--bakta_db`            | Bakta              | `/srv/db/bakta/6.0/db` |
 | `--dram_db`             | DRAM               | `/srv/db/dram` |
 | `--genomad_db`          | geNomad            | `/srv/db/genomad` |
@@ -19,6 +19,24 @@ Override per profile (Bunya paths differ from `/srv`) or on the command line.
 | `--host_ref`            | host removal       | `null` (or per-sample `host_ref` column) |
 | `--cleanifier_db`       | cleanifier         | `null` |
 | `--genomespot_models`   | GenomeSPOT         | `null` |
+
+### sylph `.syldb` selection
+
+`--sylph_db` is a path **or glob** of the `.syldb` file(s) to profile against —
+you choose which, because a sylph DB folder typically holds several (e.g.
+`/srv/db/sylph` has `gtdb-r226`, `gtdb-r232` and `fungi`). The pipeline profiles
+against **exactly the files the glob matches** (it does not blindly use the whole
+folder). Examples:
+
+```bash
+--sylph_db '/srv/db/sylph/gtdb-r226-c200-dbv1.syldb'        # one DB
+--sylph_db '/srv/db/sylph/{gtdb-r226,fungi}*.syldb'         # GTDB r226 + fungi (not r232)
+```
+
+> Note: the current `sylph` module runs `sylph profile` only. The taxonomy step
+> from the bash workflow (`sylph-tax taxprof` + `sylph-tax merge`, which uses the
+> `*_metadata.tsv.gz` files) is not yet wired — ask if you want it added (needs a
+> `sylph-tax` container and a `--sylph_tax_metadata` param).
 
 Tools that read DB locations from environment variables
 (`GTDBTK_DATA_PATH`, `CHECKM2_DATA_PATH`, `SINGLEM_METAPACKAGE_PATH`,

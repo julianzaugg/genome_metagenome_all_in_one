@@ -40,7 +40,7 @@ process SYLPH_PROFILE {
 
     input:
     path(sketches, stageAs: 'sketch_*')
-    path(db)
+    path(dbs)     // one or more .syldb files (chosen via params.sylph_db glob)
 
     output:
     path 'sylph_profile.tsv', emit: profile
@@ -49,7 +49,7 @@ process SYLPH_PROFILE {
     script:
     def args = task.ext.args ?: ''
     """
-    sylph profile ${args} -t ${task.cpus} ${db}/*.syldb ${sketches} > sylph_profile.tsv
+    sylph profile ${args} -t ${task.cpus} ${dbs} ${sketches} > sylph_profile.tsv
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

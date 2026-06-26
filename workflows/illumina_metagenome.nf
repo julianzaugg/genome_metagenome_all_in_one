@@ -51,7 +51,7 @@ workflow ILLUMINA_METAGENOME {
     // --- Read profiling (on raw reads, as per the bash workflow) ---
     READ_PROFILING(
         ch_reads,
-        file(params.sylph_db,            checkIfExists: true),
+        Channel.fromPath(params.sylph_db, checkIfExists: true).collect(),
         file(params.singlem_metapackage, checkIfExists: true),
         !params.skip_sylph,
         !params.skip_singlem
