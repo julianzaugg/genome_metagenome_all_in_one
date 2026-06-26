@@ -63,7 +63,7 @@ process RPKM_SINGLEM_MARKERS {
         package_name=\$(basename "\${spkg}" .spkg)
         dmnd="\${spkg}/\${package_name}/S3.dmnd"
         if [ -f "\${dmnd}" ]; then
-            ln -s "\${dmnd}" "singlem_marker_diamond/\${package_name}.dmnd"
+            cp -L "\${dmnd}" "singlem_marker_diamond/\${package_name}.dmnd"
             found_dmnd=1
         fi
     done
@@ -219,7 +219,17 @@ process RPKM_DIAMOND_SINGLEM {
     def args = task.ext.args ?: '--evalue 0.00001 --min-score 40 --query-cover 80 --id 70 --max-hsps 1 --max-target-seqs 1'
     """
     mkdir -p ${meta.id}.singlem_marker_blast
+    marker_count=0
     for db in ${marker_dbs}/*.dmnd; do
+        [ -e "\${db}" ] || {
+            echo "[RPKM_DIAMOND_SINGLEM] No DIAMOND marker databases found in ${marker_dbs}" >&2
+            exit 1
+        }
+        [ -f "\${db}" ] || {
+            echo "[RPKM_DIAMOND_SINGLEM] Marker database is not a regular file: \${db}" >&2
+            exit 1
+        }
+        marker_count=\$((marker_count + 1))
         marker=\$(basename "\${db}" .dmnd)
         tmp="${meta.id}.singlem_marker_blast/\${marker}.tmp"
         out="${meta.id}.singlem_marker_blast/\${marker}_blast.tsv"
@@ -236,6 +246,10 @@ process RPKM_DIAMOND_SINGLEM {
         awk -v sample="${meta.id}" -v OFS='\\t' -F '\\t' 'function abs(v){return v < 0 ? -v : v} {pq=(\$14 != 0) ? sprintf("%.3f", abs(\$9-\$8)/\$14) : "NA"; ps=(\$15 != 0) ? sprintf("%.3f", abs(\$11-\$10)/\$15) : "NA"; print sample,\$0,pq,ps}' "\${tmp}" >> "\${out}"
         rm -f "\${tmp}"
     done
+    [ "\${marker_count}" -gt 0 ] || {
+        echo "[RPKM_DIAMOND_SINGLEM] No DIAMOND marker databases found in ${marker_dbs}" >&2
+        exit 1
+    }
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
