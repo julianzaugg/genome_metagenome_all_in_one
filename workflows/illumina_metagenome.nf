@@ -49,11 +49,16 @@ workflow ILLUMINA_METAGENOME {
     }
 
     // --- Read profiling (on raw reads, as per the bash workflow) ---
+    ch_sylph_tax_meta = params.sylph_tax_metadata
+        ? Channel.fromPath(params.sylph_tax_metadata, checkIfExists: true).collect()
+        : Channel.value([])
     READ_PROFILING(
         ch_reads,
         Channel.fromPath(params.sylph_db, checkIfExists: true).collect(),
+        ch_sylph_tax_meta,
         file(params.singlem_metapackage, checkIfExists: true),
         !params.skip_sylph,
+        !params.skip_sylph && params.sylph_tax_metadata != null,
         !params.skip_singlem
     )
 

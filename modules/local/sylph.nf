@@ -63,3 +63,40 @@ process SYLPH_PROFILE {
     echo '"${task.process}": {sylph: stub}' > versions.yml
     """
 }
+
+process SYLPH_TAX {
+    // Attach taxonomy to a sylph profile and merge per-sample tables.
+    // Mirrors run_sylph.sh: sylph-tax taxprof -> sylph-tax merge (rel + seq abundance).
+    label 'process_low'
+
+    input:
+    path(profile)
+    path(metadata)   // one or more *_metadata.tsv.gz matching the .syldb files used
+
+    output:
+    path 'merged_relative_abundance.tsv', emit: relative
+    path 'merged_sequence_abundance.tsv', emit: sequence
+    path 'taxprof',                       emit: per_sample
+    path 'versions.yml',                  emit: versions
+
+    script:
+    def args = task.ext.args ?: ''
+    """
+    mkdir -p taxprof
+    sylph-tax taxprof ${profile} -o taxprof/ -t ${metadata} ${args}
+    sylph-tax merge taxprof/*.sylphmpa --column relative_abundance -o merged_relative_abundance.tsv
+    sylph-tax merge taxprof/*.sylphmpa --column sequence_abundance -o merged_sequence_abundance.tsv
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        sylph-tax: \$(sylph-tax --version 2>&1 | sed 's/sylph-tax //')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    mkdir -p taxprof
+    touch taxprof/sample.sylphmpa merged_relative_abundance.tsv merged_sequence_abundance.tsv
+    echo '"${task.process}": {sylph-tax: stub}' > versions.yml
+    """
+}

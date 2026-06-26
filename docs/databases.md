@@ -33,10 +33,18 @@ folder). Examples:
 --sylph_db '/srv/db/sylph/{gtdb-r226,fungi}*.syldb'         # GTDB r226 + fungi (not r232)
 ```
 
-> Note: the current `sylph` module runs `sylph profile` only. The taxonomy step
-> from the bash workflow (`sylph-tax taxprof` + `sylph-tax merge`, which uses the
-> `*_metadata.tsv.gz` files) is not yet wired — ask if you want it added (needs a
-> `sylph-tax` container and a `--sylph_tax_metadata` param).
+### sylph-tax taxonomy
+
+Set **`--sylph_tax_metadata`** to a glob of the `*_metadata.tsv.gz` files to run
+the taxonomy chain after profiling (`sylph-tax taxprof` → `sylph-tax merge`),
+producing `merged_relative_abundance.tsv` and `merged_sequence_abundance.tsv` in
+`02_sylph/`. Leave it `null` to run `sylph profile` only.
+
+```bash
+--sylph_tax_metadata '/srv/db/sylph/*_metadata.tsv.gz'
+```
+The metadata should correspond to the `.syldb` files in `--sylph_db` (extra
+metadata is harmless). `conf/local.config` pre-sets this to `/srv/db/sylph/*_metadata.tsv.gz`.
 
 Tools that read DB locations from environment variables
 (`GTDBTK_DATA_PATH`, `CHECKM2_DATA_PATH`, `SINGLEM_METAPACKAGE_PATH`,

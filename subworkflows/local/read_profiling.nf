@@ -1,29 +1,39 @@
 /*
- * READ_PROFILING — sylph + singlem from QC'd reads.
- * sylph: per-sample sketch then a single combined profile across all samples.
+ * READ_PROFILING — sylph (+ sylph-tax) + singlem from QC'd reads.
+ * sylph: per-sample sketch -> single combined profile -> taxonomy + merge.
  * singlem: per-sample pipe.
  */
 
-include { SYLPH_SKETCH; SYLPH_PROFILE } from '../../modules/local/sylph'
-include { SINGLEM_PIPE }                from '../../modules/local/singlem'
+include { SYLPH_SKETCH; SYLPH_PROFILE; SYLPH_TAX } from '../../modules/local/sylph'
+include { SINGLEM_PIPE }                           from '../../modules/local/singlem'
 
 workflow READ_PROFILING {
     take:
     reads               // [ meta, reads ]
     sylph_db            // collected list of .syldb files
+    sylph_tax_metadata  // collected list of *_metadata.tsv.gz (may be empty)
     singlem_metapackage // path
     run_sylph           // bool
+    run_sylph_tax       // bool (taxonomy step; requires metadata)
     run_singlem         // bool
 
     main:
-    ch_sylph_profile  = Channel.empty()
-    ch_singlem        = Channel.empty()
+    ch_sylph_profile = Channel.empty()
+    ch_sylph_rel     = Channel.empty()
+    ch_sylph_seq     = Channel.empty()
+    ch_singlem       = Channel.empty()
 
     if (run_sylph) {
         SYLPH_SKETCH(reads)
         ch_sketches = SYLPH_SKETCH.out.sketch.map { meta, s -> s }.collect()
         SYLPH_PROFILE(ch_sketches, sylph_db)
         ch_sylph_profile = SYLPH_PROFILE.out.profile
+
+        if (run_sylph_tax) {
+            SYLPH_TAX(SYLPH_PROFILE.out.profile, sylph_tax_metadata)
+            ch_sylph_rel = SYLPH_TAX.out.relative
+            ch_sylph_seq = SYLPH_TAX.out.sequence
+        }
     }
 
     if (run_singlem) {
@@ -32,6 +42,8 @@ workflow READ_PROFILING {
     }
 
     emit:
-    sylph   = ch_sylph_profile
-    singlem = ch_singlem
+    sylph              = ch_sylph_profile
+    sylph_relative     = ch_sylph_rel
+    sylph_sequence     = ch_sylph_seq
+    singlem            = ch_singlem
 }
