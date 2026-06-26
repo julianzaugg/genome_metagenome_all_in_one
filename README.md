@@ -14,20 +14,26 @@ schema, `nf-schema` param validation — without nf-core governance. Reuses
 nf-core/modules where they exist; bespoke tools (Aviary, autocycler, myloasm,
 dorado, sylph, cleanifier, DRAM, chewbacca, …) are custom local modules.
 
-**Containers only.** Reused nf-core modules pull biocontainers from a registry;
-bespoke tools use local `.sif` images on a shared path. See
+**Containers only.** Reused nf-core modules and most bespoke wrappers pull
+biocontainers from a registry; the few unpackaged tools use local `.sif` images
+on a shared path. See
 [docs/containers.md](docs/containers.md).
 
 ## Quick start
 
 ```bash
 # Stub dry-run (no real tools, validates wiring)
-nextflow run . -profile test,local --mode illumina_metagenome \
-  --input assets/samplesheets/illumina_metagenome.csv -stub
+nextflow run . -profile test --mode illumina_metagenome -stub
 
-# Real run on Bunya
+# Real run on the local /srv server; host removal is enabled by default
+nextflow run . -profile local --mode illumina_metagenome \
+  --input samplesheet.csv --outdir results \
+  --host_ref /srv/db/host/host.fa.gz
+
+# Real run on Bunya; pass Bunya-visible DB/reference paths
 nextflow run . -profile bunya --mode illumina_metagenome \
-  --input samplesheet.csv --outdir results
+  --input samplesheet.csv --outdir /scratch/project/a_ace/$USER/gmaio_results \
+  --host_ref /scratch/project/a_ace/db/host/host.fa.gz
 ```
 
 ## Profiles

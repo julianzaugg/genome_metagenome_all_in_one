@@ -26,7 +26,7 @@ One row per sample. Columns:
 | `fastq_2`    | with `fastq_1`                          | gzipped FASTQ |
 | `long_reads` | Nanopore modes (or `pod5_dir`)          | gzipped FASTQ |
 | `pod5_dir`   | Nanopore modes (alternative to `long_reads`) | directory of POD5 for dorado basecalling |
-| `host_ref`   | optional                                | per-sample host reference FASTA |
+| `host_ref`   | optional                                | leave blank for now; Illumina metagenome uses global `--host_ref` / `--cleanifier_db` |
 
 Per-mode required-input rules are enforced at runtime in `subworkflows/local/input_check.nf`.
 
@@ -52,6 +52,10 @@ Steps are toggled with `--skip_*` / `--run_*` params, e.g.
 `nextflow run . --help` for the full list. Reorderable steps are independent
 subworkflows fed from shared upstream channels, so changing the flow is a wiring
 edit in `workflows/<mode>.nf`, not a rewrite.
+
+Host removal is on by default. Keep it on for normal Illumina-metagenome runs and
+provide either `--cleanifier_db` or `--host_ref`; use `--skip_host_removal true`
+only when you deliberately want assembly from QC'd, unfiltered reads.
 
 ## Tool-choice slots
 

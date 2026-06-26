@@ -65,8 +65,9 @@
                 "checkv_db":           { "type": "string", "description": "CheckV database dir." },
                 "eggnog_db":           { "type": "string", "description": "eggNOG data dir (EGGNOG_DATA_DIR)." },
                 "amrfinder_db":        { "type": "string", "description": "AMRFinderPlus DB dir (null = use container's bundled DB)." },
-                "host_ref":            { "type": "string", "description": "Default host reference FASTA (overridden per-sample by host_ref column)." },
-                "cleanifier_db":       { "type": "string", "description": "Cleanifier database / index." },
+                "host_ref":            { "type": "string", "description": "Host reference FASTA used to build a Cleanifier index when cleanifier_db is not supplied." },
+                "cleanifier_db":       { "type": "string", "description": "Pre-built Cleanifier .filter index. If unset, host_ref is indexed with cleanifier index." },
+                "cleanifier_nobjects": { "type": "integer", "description": "Optional -n/--nobjects override for cleanifier index; defaults to estimated FASTA bases." },
                 "genomespot_models":   { "type": "string", "description": "GenomeSPOT models directory." },
                 "download_db":         { "type": "string", "description": "Comma-list of DB names or 'all' (only with --mode download_dbs)." },
                 "db_outdir":           { "type": "string", "default": "databases", "description": "Where --mode download_dbs writes." }

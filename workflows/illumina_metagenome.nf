@@ -30,6 +30,7 @@ include { COVERM_CLUSTER; COVERM_GENOME } from '../modules/local/coverm'
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
+include { CLEANIFIER_INDEX }            from '../modules/local/host_removal'
 
 // resolve a possibly-null db param to a path or an empty list (for optional inputs)
 def optpath = { p -> p ? file(p, checkIfExists: true) : [] }
@@ -65,16 +66,28 @@ workflow ILLUMINA_METAGENOME {
 
     // --- Host removal ---
     if (!params.skip_host_removal) {
-        HOST_REMOVAL(ch_qc, optpath(params.cleanifier_db))
+        if (params.cleanifier_db) {
+            ch_cleanifier_index = Channel.value(file(params.cleanifier_db, checkIfExists: true))
+        } else {
+            if (!params.host_ref) {
+                error "Host removal is enabled but neither --cleanifier_db nor --host_ref is set. Provide a Cleanifier .filter index, provide a FASTA with --host_ref to build one, or rerun with --skip_host_removal true."
+            }
+            CLEANIFIER_INDEX(file(params.host_ref, checkIfExists: true), params.cleanifier_nobjects)
+            ch_cleanifier_index = CLEANIFIER_INDEX.out.index
+        }
+        HOST_REMOVAL(ch_qc, ch_cleanifier_index)
         ch_clean = HOST_REMOVAL.out.reads
     } else {
         ch_clean = ch_qc
     }
 
     // --- Assembly (metaSPAdes) ---
-    SPADES(ch_clean.map { meta, reads -> [ meta, reads, [], [] ] }, [], [])
-    PREP_ASSEMBLY(SPADES.out.scaffolds)
-    ch_assembly = PREP_ASSEMBLY.out.assembly        // [ meta, scaffolds.fasta ]
+    ch_assembly = Channel.empty()
+    if (!params.skip_assembly) {
+        SPADES(ch_clean.map { meta, reads -> [ meta, reads, [], [] ] }, [], [])
+        PREP_ASSEMBLY(SPADES.out.scaffolds)
+        ch_assembly = PREP_ASSEMBLY.out.assembly    // [ meta, scaffolds.fasta ]
+    }
 
     // --- Binning (Aviary) ---
     ch_aviary_in = ch_assembly.join(ch_clean)       // [ meta, assembly, reads ]

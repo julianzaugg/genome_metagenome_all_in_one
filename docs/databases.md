@@ -16,9 +16,27 @@ Override per profile (Bunya paths differ from `/srv`) or on the command line.
 | `--checkv_db`           | CheckV             | `/srv/db/checkv/checkv-db-v1.5` |
 | `--eggnog_db`           | Aviary             | `/srv/db/eggnog/5.0` |
 | `--amrfinder_db`        | AMRFinderPlus      | `null` → container's bundled DB |
-| `--host_ref`            | host removal       | `null` (or per-sample `host_ref` column) |
-| `--cleanifier_db`       | cleanifier         | `null` |
+| `--host_ref`            | Cleanifier         | host FASTA used to build an index if `--cleanifier_db` is unset |
+| `--cleanifier_db`       | Cleanifier         | `null` (use a prebuilt `.filter`, otherwise build from `--host_ref`) |
+| `--cleanifier_nobjects` | Cleanifier         | optional `cleanifier index -n` override; defaults to estimated FASTA bases |
 | `--genomespot_models`   | GenomeSPOT         | `null` |
+
+### Cleanifier host removal
+
+Host removal is enabled by default. Provide one of:
+
+```bash
+--cleanifier_db /path/to/prebuilt.cleanifier.filter
+# or
+--host_ref /path/to/host.fa.gz
+```
+
+When `--host_ref` is used, the pipeline first builds a Cleanifier index and
+publishes it under `04_host_removed/index/`. For repeated runs, point
+`--cleanifier_db` at the published `.filter` file to avoid rebuilding. Cleanifier
+requires `-n/--nobjects` while indexing; by default the pipeline estimates this
+from FASTA base count. For `.zst` FASTA or tighter sizing, set
+`--cleanifier_nobjects` explicitly.
 
 ### sylph `.syldb` selection
 
@@ -29,8 +47,8 @@ against **exactly the files the glob matches** (it does not blindly use the whol
 folder). Examples:
 
 ```bash
---sylph_db '/srv/db/sylph/gtdb-r226-c200-dbv1.syldb'        # one DB
---sylph_db '/srv/db/sylph/{gtdb-r226,fungi}*.syldb'         # GTDB r226 + fungi (not r232)
+--sylph_db '/srv/db/sylph/gtdb-r232-c200-dbv1.syldb'        # one DB
+--sylph_db '/srv/db/sylph/{gtdb-r232,fungi}*.syldb'         # GTDB r232 + fungi (not r226)
 ```
 
 ### sylph-tax taxonomy

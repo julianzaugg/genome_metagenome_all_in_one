@@ -22,7 +22,7 @@ and the DB downloaders. Plus the nf-core modules (fastp, spades, gtdbtk, checkm2
 geNomad, checkv).
 
 ### Must provide a local `.sif` at `params.container_base`
-Only three — tools not packaged on biocontainers, or needing two tools together:
+Only tools not packaged on biocontainers need local images:
 
 | Image (`<name>.sif`)   | Why a local image | Used by |
 |------------------------|-------------------|---------|
@@ -30,8 +30,9 @@ Only three — tools not packaged on biocontainers, or needing two tools togethe
 | `genomespot_1.0`       | not packaged on biocontainers | bin growth prediction (optional) |
 
 For the **Illumina-metagenome path you need no local builds** — host removal uses
-the `cleanifier` biocontainer (you must supply its `--cleanifier_db` index). For
-Nanopore you'll need `dorado`.
+the `cleanifier` biocontainer. Supply either a prebuilt `--cleanifier_db` index
+or a FASTA with `--host_ref` so the pipeline can build the index. For Nanopore
+you'll need `dorado`.
 
 > These local-`.sif` entries use `${params.container_base}`, which is only set by a
 > profile (e.g. `-profile local` → `/srv/db/containers`). If you run without that
