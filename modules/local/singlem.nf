@@ -37,6 +37,7 @@ process SINGLEM_PIPE {
     # https://wwood.github.io/singlem/tools/prokaryotic_fraction
     singlem prokaryotic_fraction \\
         --input-profile ${meta.id}.condensed.tsv \\
+        --metapackage ${metapackage} \\
         ${input} \\
         --output-tsv ${meta.id}.prokaryotic_fraction.tsv
 
