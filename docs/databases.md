@@ -8,10 +8,10 @@ Override per profile (Bunya paths differ from `/srv`) or on the command line.
 | `--gtdbtk_db`           | GTDB-Tk, Aviary    | `/srv/db/gtdbtk/official/release226` |
 | `--checkm2_db`          | CheckM2, Aviary    | `/srv/db/checkm2_data/1.0.2/CheckM2_database` |
 | `--checkm1_db`          | CheckM1            | `/srv/db/checkm1` |
-| `--singlem_metapackage` | SingleM            | `/srv/db/singlem_packages/S5.4.0...smpkg.zb` |
+| `--singlem_metapackage` | SingleM            | `/srv/db/singlem_packages/S6.5.0.GTDB_r232.metapackage_20260319.smpkg.zb` |
 | `--sylph_db`            | sylph              | path/glob of the `.syldb` file(s) to use (see note) |
 | `--bakta_db`            | Bakta              | `/srv/db/bakta/6.0/db` |
-| `--dram_db`             | DRAM               | `/srv/db/dram` |
+| `--dram_db`             | DRAM               | `/srv/db/DRAM_1.4.6` |
 | `--genomad_db`          | geNomad            | `/srv/db/genomad` |
 | `--checkv_db`           | CheckV             | `/srv/db/checkv/checkv-db-v1.5` |
 | `--eggnog_db`           | Aviary             | `/srv/db/eggnog/5.0` |
