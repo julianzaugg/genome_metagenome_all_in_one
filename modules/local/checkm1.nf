@@ -11,6 +11,7 @@ process CHECKM1_LINEAGEWF {
 
     output:
     path 'checkm_lineage_wf_results.tsv', emit: summary
+    path 'checkm_qa_results.tsv',         emit: qa
     path 'checkm1',                       emit: outdir
     path 'versions.yml',                  emit: versions
 
@@ -19,9 +20,14 @@ process CHECKM1_LINEAGEWF {
     """
     checkm lineage_wf ${args} \\
         -x fasta \\
-        -t ${task.cpus} \\
+        -t ${task.cpus} --pplacer_threads ${task.cpus} \\
         --tab_table -f checkm_lineage_wf_results.tsv \\
         bins checkm1
+
+    # extended QA table (mirrors run_checkm.sh `checkm qa -o2`)
+    checkm qa checkm1/lineage.ms checkm1 \\
+        -o 2 --threads ${task.cpus} \\
+        --tab_table -f checkm_qa_results.tsv
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -33,6 +39,7 @@ process CHECKM1_LINEAGEWF {
     """
     mkdir -p checkm1
     echo -e "Bin Id\\tCompleteness\\tContamination" > checkm_lineage_wf_results.tsv
+    echo -e "Bin Id\\tCompleteness\\tContamination\\tStrain heterogeneity" > checkm_qa_results.tsv
     echo '"${task.process}": {checkm: stub}' > versions.yml
     """
 }

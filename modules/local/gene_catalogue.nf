@@ -1,42 +1,45 @@
 /*
- * Gene catalogue: collect predicted proteins -> keep complete genes + namespace
- * headers by sample -> cluster with CD-HIT -> tabulate cluster membership.
- * Mirrors run_cdhit_scaffolds.sh (complete genes = pyrodigal partial=00) and the
- * downstream tabulate_cdhit.py helper. Shared by both metagenome tracks.
+ * Gene catalogue: collect predicted proteins + nucleotides -> keep complete genes
+ * (pyrodigal partial=00) namespaced by sample -> cluster with CD-HIT at 100% and
+ * 90% -> extract nucleotide CDS for the 100% reps -> tabulate cluster membership.
+ * Mirrors run_cdhit_scaffolds.sh (mfqe replaced by seqkit). Shared by both
+ * metagenome tracks.
  */
 
 process CATALOGUE_PREP {
     label 'process_low'
 
     input:
-    path(faas, stageAs: 'faa/*')   // per-sample protein fastas (named <sample>.faa)
+    path(faas, stageAs: 'faa/*')   // per-sample protein fastas (<sample>.faa)
+    path(fnas, stageAs: 'fna/*')   // per-sample nucleotide fastas (<sample>.fna)
 
     output:
-    path 'all_complete_proteins.faa', emit: proteins
-    path 'versions.yml',              emit: versions
+    path 'all_complete_proteins.faa',    emit: proteins
+    path 'all_complete_nucleotides.fna', emit: nucleotides
+    path 'versions.yml',                 emit: versions
 
     script:
     """
     : > all_complete_proteins.faa
+    : > all_complete_nucleotides.fna
     for f in faa/*.faa; do
         name=\$(basename "\$f" .faa)
-        # keep only complete genes (pyrodigal 'partial=00') and namespace by sample
-        awk -v s="\$name" '
-            /^>/ { keep = (\$0 ~ /partial=00/); if (keep) { sub(/^>/, ">" s "___"); print \$1 } next }
-            { if (keep) print }
-        ' "\$f" >> all_complete_proteins.faa
+        # keep complete genes (header contains partial=00) and namespace by sample
+        seqkit grep -n -r -p 'partial=00' "\$f"            | sed "s/^>/>\${name}___/" >> all_complete_proteins.faa
+        seqkit grep -n -r -p 'partial=00' "fna/\${name}.fna" | sed "s/^>/>\${name}___/" >> all_complete_nucleotides.fna
     done
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        awk: \$(awk --version 2>&1 | head -1 | sed 's/[^0-9.]*//;s/,.*//')
+        seqkit: \$(seqkit version 2>&1 | sed 's/seqkit v//')
     END_VERSIONS
     """
 
     stub:
     """
     cat faa/*.faa > all_complete_proteins.faa 2>/dev/null || echo ">x___1" > all_complete_proteins.faa
-    echo '"${task.process}": {awk: stub}' > versions.yml
+    cat fna/*.fna > all_complete_nucleotides.fna 2>/dev/null || echo ">x___1" > all_complete_nucleotides.fna
+    echo '"${task.process}": {seqkit: stub}' > versions.yml
     """
 }
 
@@ -47,14 +50,17 @@ process CDHIT {
     path(proteins)
 
     output:
-    path 'gene_catalogue.faa',       emit: catalogue
+    path 'gene_catalogue.faa',       emit: catalogue       // 100% representatives
     path 'gene_catalogue.faa.clstr', emit: clusters
+    path 'gene_catalogue_90.faa',    emit: catalogue_90    // 90% representatives
     path 'versions.yml',             emit: versions
 
     script:
-    def args = task.ext.args ?: '-c 1.0 -aS 0.9 -d 0 -M 0 -g 1'
+    def args100 = task.ext.args   ?: '-c 1.00 -n 5 -M 80000 -d 0'
+    def args90  = task.ext.args90 ?: '-c 0.90 -s 0.8 -n 5 -M 80000 -g 1 -d 0'
     """
-    cd-hit ${args} -T ${task.cpus} -i ${proteins} -o gene_catalogue.faa
+    cd-hit ${args100} -T ${task.cpus} -i ${proteins} -o gene_catalogue.faa
+    cd-hit ${args90}  -T ${task.cpus} -i ${proteins} -o gene_catalogue_90.faa
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -65,8 +71,39 @@ process CDHIT {
     stub:
     """
     cp ${proteins} gene_catalogue.faa
+    cp ${proteins} gene_catalogue_90.faa
     echo ">Cluster 0" > gene_catalogue.faa.clstr
     echo '"${task.process}": {cdhit: stub}' > versions.yml
+    """
+}
+
+process CATALOGUE_CDS {
+    // nucleotide sequences for the 100% representative proteins (seqkit grep)
+    label 'process_low'
+
+    input:
+    path(catalogue)     // gene_catalogue.faa (100% reps)
+    path(nucleotides)   // all_complete_nucleotides.fna
+
+    output:
+    path 'gene_catalogue_CDS.fna', emit: cds
+    path 'versions.yml',           emit: versions
+
+    script:
+    """
+    grep '^>' ${catalogue} | sed 's/^>//; s/ .*//' > rep_ids.txt
+    seqkit grep -f rep_ids.txt ${nucleotides} > gene_catalogue_CDS.fna
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        seqkit: \$(seqkit version 2>&1 | sed 's/seqkit v//')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    touch gene_catalogue_CDS.fna
+    echo '"${task.process}": {seqkit: stub}' > versions.yml
     """
 }
 

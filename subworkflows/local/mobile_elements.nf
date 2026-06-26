@@ -20,10 +20,18 @@ workflow MOBILE_ELEMENTS {
     main:
     GENOMAD_ENDTOEND(assemblies, genomad_db)
 
-    ch_virus_fnas   = GENOMAD_ENDTOEND.out.virus_fasta.map   { meta, f -> f }.collect()
-    ch_plasmid_fnas = GENOMAD_ENDTOEND.out.plasmid_fasta.map { meta, f -> f }.collect()
-
-    GENOMAD_PROCESS(ch_virus_fnas, ch_plasmid_fnas)
+    // collect each geNomad per-sample output across samples (drop meta)
+    def justfiles = { ch -> ch.map { meta, f -> f }.collect() }
+    GENOMAD_PROCESS(
+        justfiles(GENOMAD_ENDTOEND.out.virus_fasta),
+        justfiles(GENOMAD_ENDTOEND.out.plasmid_fasta),
+        justfiles(GENOMAD_ENDTOEND.out.virus_proteins),
+        justfiles(GENOMAD_ENDTOEND.out.plasmid_proteins),
+        justfiles(GENOMAD_ENDTOEND.out.virus_genes),
+        justfiles(GENOMAD_ENDTOEND.out.plasmid_genes),
+        justfiles(GENOMAD_ENDTOEND.out.virus_summary),
+        justfiles(GENOMAD_ENDTOEND.out.plasmid_summary)
+    )
 
     // CheckV on pooled viral sequences, then collate viruses + proviruses.
     CHECKV_ENDTOEND(GENOMAD_PROCESS.out.virus.map { f -> [ [id: 'pooled_virus'], f ] }, checkv_db)

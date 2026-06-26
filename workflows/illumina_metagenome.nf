@@ -126,6 +126,7 @@ workflow ILLUMINA_METAGENOME {
         PYRODIGAL_SCAFFOLDS(ch_assembly)
         GENE_CATALOGUE(
             PYRODIGAL_SCAFFOLDS.out.faa,
+            PYRODIGAL_SCAFFOLDS.out.fna,
             optpath(params.dram_db),
             !params.skip_annotation
         )
