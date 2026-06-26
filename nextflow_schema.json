@@ -91,6 +91,7 @@
                 "skip_mobile_elements": { "type": "boolean" },
                 "run_nonpareil":        { "type": "boolean", "default": true },
                 "run_genomespot":       { "type": "boolean", "default": true },
+                "run_barrnap":          { "type": "boolean", "default": true },
                 "run_checkm1":          { "type": "boolean", "default": true }
             }
         },
@@ -99,6 +100,7 @@
             "type": "object",
             "properties": {
                 "catalogue_clusterer": { "type": "string", "enum": ["cdhit", "mmseqs"], "default": "cdhit" },
+                "catalogue_identities": { "type": "string", "default": "1.0,0.9", "description": "Comma-separated CD-HIT identities; first is the primary catalogue (used for CDS/membership/DRAM)." },
                 "core_alignment":      { "type": "string", "enum": ["parsnp", "snippy"], "default": "parsnp" },
                 "tree_builder":        { "type": "string", "enum": ["iqtree", "raxml"], "default": "iqtree" }
             }

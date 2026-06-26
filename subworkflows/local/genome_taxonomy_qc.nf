@@ -1,25 +1,26 @@
 /*
- * GENOME_TAXONOMY_QC — taxonomy + quality on a set of genomes (dereplicated bins
- * for metagenomes, assemblies for isolates).
+ * GENOME_TAXONOMY_QC — taxonomy + per-genome analyses on a set of genomes
+ * (dereplicated representatives for metagenomes; assemblies for isolates).
  *   GTDB-Tk classify_wf  (all genomes together)
- *   CheckM1 lineage_wf    (optional, run alongside CheckM2 which runs upstream)
- *   GenomeSPOT            (optional, per-genome: needs proteins)
+ *   GenomeSPOT           (optional, per-genome: needs proteins)
+ *   Barrnap              (optional, per-genome: rRNA / 16S)
+ * NOTE: CheckM1/CheckM2 run upstream on the full bin set (they drive dereplication).
  */
 
 include { GTDBTK_CLASSIFYWF }            from '../../modules/nf-core/gtdbtk/classifywf/main'
-include { CHECKM1_LINEAGEWF }            from '../../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_BINS }  from '../../modules/local/pyrodigal'
 include { GENOMESPOT }                   from '../../modules/local/genomespot'
+include { BARRNAP }                      from '../../modules/local/barrnap'
 
 workflow GENOME_TAXONOMY_QC {
     take:
-    genomes          // collected list of genome fastas
-    per_genome       // [ meta, fasta ] per genome (for genomespot)
-    gtdbtk_db        // path
+    genomes           // collected list of genome fastas
+    per_genome        // [ meta, fasta ] per genome
+    gtdbtk_db         // path
     genomespot_models // path (may be [])
-    run_taxonomy     // bool
-    run_checkm1      // bool
-    run_genomespot   // bool
+    run_taxonomy      // bool
+    run_genomespot    // bool
+    run_barrnap       // bool
 
     main:
     ch_gtdbtk = Channel.empty()
@@ -32,10 +33,6 @@ workflow GENOME_TAXONOMY_QC {
         ch_gtdbtk = GTDBTK_CLASSIFYWF.out.summary
     }
 
-    if (run_checkm1) {
-        CHECKM1_LINEAGEWF(genomes)
-    }
-
     ch_genomespot = Channel.empty()
     if (run_genomespot) {
         PYRODIGAL_BINS(per_genome)
@@ -44,7 +41,14 @@ workflow GENOME_TAXONOMY_QC {
         ch_genomespot = GENOMESPOT.out.predictions
     }
 
+    ch_rrna = Channel.empty()
+    if (run_barrnap) {
+        BARRNAP(per_genome)
+        ch_rrna = BARRNAP.out.rrna
+    }
+
     emit:
-    gtdbtk    = ch_gtdbtk
+    gtdbtk     = ch_gtdbtk
     genomespot = ch_genomespot
+    rrna       = ch_rrna
 }

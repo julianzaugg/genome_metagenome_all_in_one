@@ -48,19 +48,29 @@ process CDHIT {
 
     input:
     path(proteins)
+    val(identities)   // comma-separated, e.g. "1.0,0.9" — first is the primary catalogue
 
     output:
-    path 'gene_catalogue.faa',       emit: catalogue       // 100% representatives
-    path 'gene_catalogue.faa.clstr', emit: clusters
-    path 'gene_catalogue_90.faa',    emit: catalogue_90    // 90% representatives
+    path 'gene_catalogue.faa',       emit: catalogue       // primary (first identity)
+    path 'gene_catalogue.faa.clstr', emit: clusters        // primary .clstr
+    path 'gene_catalogue_id*.faa',   emit: catalogues      // one per identity
     path 'versions.yml',             emit: versions
 
     script:
-    def args100 = task.ext.args   ?: '-c 1.00 -n 5 -M 80000 -d 0'
-    def args90  = task.ext.args90 ?: '-c 0.90 -s 0.8 -n 5 -M 80000 -g 1 -d 0'
+    def args = task.ext.args ?: '-d 0 -M 80000 -g 1'
     """
-    cd-hit ${args100} -T ${task.cpus} -i ${proteins} -o gene_catalogue.faa
-    cd-hit ${args90}  -T ${task.cpus} -i ${proteins} -o gene_catalogue_90.faa
+    first=1
+    for c in \$(echo "${identities}" | tr ',' ' '); do
+        # cd-hit word size depends on the identity threshold
+        n=\$(awk -v c="\$c" 'BEGIN{ if(c>=0.7)print 5; else if(c>=0.6)print 4; else if(c>=0.5)print 3; else print 2 }')
+        pct=\$(awk -v c="\$c" 'BEGIN{ printf "%d", c*100 }')
+        cd-hit ${args} -c "\$c" -n "\$n" -T ${task.cpus} -i ${proteins} -o gene_catalogue_id\${pct}.faa
+        if [ "\$first" = 1 ]; then
+            cp gene_catalogue_id\${pct}.faa       gene_catalogue.faa
+            cp gene_catalogue_id\${pct}.faa.clstr gene_catalogue.faa.clstr
+            first=0
+        fi
+    done
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -70,8 +80,11 @@ process CDHIT {
 
     stub:
     """
+    for c in \$(echo "${identities}" | tr ',' ' '); do
+        pct=\$(awk -v c="\$c" 'BEGIN{ printf "%d", c*100 }')
+        cp ${proteins} gene_catalogue_id\${pct}.faa
+    done
     cp ${proteins} gene_catalogue.faa
-    cp ${proteins} gene_catalogue_90.faa
     echo ">Cluster 0" > gene_catalogue.faa.clstr
     echo '"${task.process}": {cdhit: stub}' > versions.yml
     """

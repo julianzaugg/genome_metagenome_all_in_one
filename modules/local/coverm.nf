@@ -8,7 +8,8 @@ process COVERM_CLUSTER {
 
     input:
     path(bins, stageAs: 'bins/*')
-    path(checkm2_report)
+    path(checkm2_report)   // [] if CheckM2 skipped
+    path(checkm1_report)   // [] if CheckM1 skipped
 
     output:
     path 'representatives/*.fasta',                  emit: representatives
@@ -18,27 +19,44 @@ process COVERM_CLUSTER {
 
     script:
     def args    = task.ext.args ?: '--precluster-method finch --ani 0.97'
-    def quality = task.ext.quality ?: 50   // completeness - 3*contamination >= quality
-    def qc      = checkm2_report ? "--checkm2-quality-report ${checkm2_report}" : ''
+    def quality = task.ext.quality ?: 50   // completeness - weight*contamination >= quality
+    def weight  = task.ext.weight  ?: 3
     """
+    # CoverM picks representatives by quality: prefer CheckM2, else CheckM1 tab-table.
+    qcflag=""
+    if [ -s "${checkm2_report}" ]; then
+        qcflag="--checkm2-quality-report ${checkm2_report}"
+    elif [ -s "${checkm1_report}" ]; then
+        qcflag="--checkm-tab-table ${checkm1_report}"
+    fi
+
     coverm cluster ${args} \\
         -t ${task.cpus} \\
         --genome-fasta-directory bins \\
         --genome-fasta-extension fasta \\
         --output-representative-fasta-directory representatives \\
         --output-cluster-definition cluster_definition.tsv \\
-        ${qc}
+        \$qcflag
 
-    # high-quality subset: completeness - 3*contamination >= ${quality}
-    # (mirrors run_bin_dereplication.sh; CheckM2 columns: 1=Name 2=Completeness 3=Contamination)
+    # High-quality subset: a representative is HQ if completeness - ${weight}*contamination
+    # >= ${quality} in EITHER CheckM report (union). Column indices found by header name.
+    : > hq_ids.txt
+    pass_ids() {
+        [ -s "\$1" ] || return
+        awk -F '\\t' -v q=${quality} -v k=${weight} '
+            NR==1 { for(i=1;i<=NF;i++){ if(\$i=="Completeness")cc=i; if(\$i=="Contamination")ct=i;
+                                        if(\$i=="Name"||\$i=="Bin Id"||\$i=="genome")id=i } next }
+            (cc && ct && id && (\$cc - k*\$ct) >= q) { print \$id }
+        ' "\$1" >> hq_ids.txt
+    }
+    pass_ids "${checkm2_report}"
+    pass_ids "${checkm1_report}"
+
     mkdir -p high_quality_representatives
-    if [ -n "${qc}" ]; then
-        awk -F '\\t' 'NR>1 && (\$2 - (\$3*3)) >= ${quality} {print \$1}' ${checkm2_report} \\
-        | while read -r bin_id; do
-            [ -f "representatives/\${bin_id}.fasta" ] && cp "representatives/\${bin_id}.fasta" high_quality_representatives/
-        done
-        echo "Representatives with completeness - 3*contamination >= ${quality}" > high_quality_representatives/README.txt
-    fi
+    sort -u hq_ids.txt | while read -r bin_id; do
+        [ -n "\$bin_id" ] && [ -f "representatives/\${bin_id}.fasta" ] && cp "representatives/\${bin_id}.fasta" high_quality_representatives/
+    done
+    echo "HQ = completeness - ${weight}*contamination >= ${quality} in CheckM1 OR CheckM2" > high_quality_representatives/README.txt
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

@@ -27,6 +27,7 @@ include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict
 include { PREP_ASSEMBLY }               from '../modules/local/util'
 include { AVIARY_RECOVER }              from '../modules/local/aviary'
 include { COVERM_CLUSTER; COVERM_GENOME } from '../modules/local/coverm'
+include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
 
@@ -87,15 +88,25 @@ workflow ILLUMINA_METAGENOME {
         // all bins across samples, flattened for cross-sample steps
         ch_all_bins = AVIARY_RECOVER.out.bins.map { meta, bins -> bins }.flatten().collect()
 
-        // CheckM2 on all bins (quality report drives dereplication)
-        CHECKM2_PREDICT(
-            ch_all_bins.map { bins -> [ [id: 'all_bins'], bins ] },
-            [ [:], file(params.checkm2_db) ]
-        )
+        // CheckM on ALL bins (pre-dereplication). CheckM2 drives clustering; both
+        // CheckM1 and CheckM2 feed the high-quality-representative selection.
+        ch_checkm2_tsv = Channel.value([])
+        ch_checkm1_tsv = Channel.value([])
+        if (!params.skip_checkm) {
+            CHECKM2_PREDICT(
+                ch_all_bins.map { bins -> [ [id: 'all_bins'], bins ] },
+                [ [:], file(params.checkm2_db) ]
+            )
+            ch_checkm2_tsv = CHECKM2_PREDICT.out.checkm2_tsv.map { m, t -> t }
+        }
+        if (params.run_checkm1) {
+            CHECKM1_LINEAGEWF(ch_all_bins)
+            ch_checkm1_tsv = CHECKM1_LINEAGEWF.out.summary
+        }
 
         // --- Dereplication ---
         if (!params.skip_dereplication) {
-            COVERM_CLUSTER(ch_all_bins, CHECKM2_PREDICT.out.checkm2_tsv.map { m, t -> t })
+            COVERM_CLUSTER(ch_all_bins, ch_checkm2_tsv, ch_checkm1_tsv)
             ch_reps      = COVERM_CLUSTER.out.representatives.collect()
             ch_per_rep   = COVERM_CLUSTER.out.representatives.flatten()
                                 .map { f -> [ [id: f.baseName], f ] }
@@ -109,15 +120,15 @@ workflow ILLUMINA_METAGENOME {
             COVERM_GENOME(ch_clean, ch_reps)
         }
 
-        // --- Taxonomy + QC on representatives ---
+        // --- Taxonomy + per-genome QC on representatives ---
         GENOME_TAXONOMY_QC(
             ch_reps,
             ch_per_rep,
             file(params.gtdbtk_db, checkIfExists: true),
             optpath(params.genomespot_models),
             !params.skip_taxonomy,
-            params.run_checkm1,
-            params.run_genomespot
+            params.run_genomespot,
+            params.run_barrnap
         )
     }
 
@@ -127,6 +138,7 @@ workflow ILLUMINA_METAGENOME {
         GENE_CATALOGUE(
             PYRODIGAL_SCAFFOLDS.out.faa,
             PYRODIGAL_SCAFFOLDS.out.fna,
+            params.catalogue_identities,
             optpath(params.dram_db),
             !params.skip_annotation
         )

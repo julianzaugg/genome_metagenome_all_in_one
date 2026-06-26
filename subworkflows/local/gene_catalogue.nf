@@ -17,6 +17,7 @@ workflow GENE_CATALOGUE {
     take:
     proteins       // [ meta, faa ] per sample
     nucleotides    // [ meta, fna ] per sample
+    identities     // val: comma-separated CD-HIT identities
     dram_db        // path
     run_annotation // bool
 
@@ -25,7 +26,7 @@ workflow GENE_CATALOGUE {
     ch_fnas = nucleotides.map { meta, fna -> fna }.collect()
 
     CATALOGUE_PREP(ch_faas, ch_fnas)
-    CDHIT(CATALOGUE_PREP.out.proteins)
+    CDHIT(CATALOGUE_PREP.out.proteins, identities)
     CATALOGUE_CDS(CDHIT.out.catalogue, CATALOGUE_PREP.out.nucleotides)
     CATALOGUE_TABULATE(CDHIT.out.clusters)
 
@@ -36,9 +37,9 @@ workflow GENE_CATALOGUE {
     }
 
     emit:
-    catalogue    = CDHIT.out.catalogue
-    catalogue_90 = CDHIT.out.catalogue_90
-    cds          = CATALOGUE_CDS.out.cds
-    membership   = CATALOGUE_TABULATE.out.membership
-    annotations  = ch_annotations
+    catalogue   = CDHIT.out.catalogue        // primary (first identity)
+    catalogues  = CDHIT.out.catalogues       // all identities
+    cds         = CATALOGUE_CDS.out.cds
+    membership  = CATALOGUE_TABULATE.out.membership
+    annotations = ch_annotations
 }
