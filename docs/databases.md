@@ -35,8 +35,10 @@ When `--host_ref` is used, the pipeline first builds a Cleanifier index and
 publishes it under `04_host_removed/index/`. For repeated runs, point
 `--cleanifier_db` at the published `.filter` file to avoid rebuilding. Cleanifier
 requires `-n/--nobjects` while indexing; by default the pipeline estimates this
-from FASTA base count. For `.zst` FASTA or tighter sizing, set
-`--cleanifier_nobjects` explicitly.
+from FASTA base count. Indexing uses `-k 29 --windowsize 33` by default; adjust
+`CLEANIFIER_INDEX.ext.args` in `conf/modules.config` if you need a different
+mask/k-mer setup. For `.zst` FASTA or tighter sizing, set `--cleanifier_nobjects`
+explicitly.
 
 ### sylph `.syldb` selection
 
