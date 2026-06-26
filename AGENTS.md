@@ -22,6 +22,13 @@ Concise guide for working in this repo. Keep this file minimal.
 # wiring check, no real tools
 nextflow run . -profile test,local --mode illumina_metagenome \
   --input assets/samplesheets/illumina_metagenome.csv -stub
+# laptop/Codex local check: avoid the Nextflow 23.10.1 wrapper + Java 21 issue
+NXF_PLUGINS_MODE=prod NXF_PLUGINS_DIR=$HOME/.nextflow/plugins \
+  java -jar $HOME/.nextflow/framework/24.10.5/nextflow-24.10.5-one.jar run . \
+  -profile test,local --mode illumina_metagenome \
+  --input assets/samplesheets/illumina_metagenome.csv -stub \
+  --skip_host_removal true --skip_assembly true --skip_binning true \
+  --skip_gene_catalogue true --skip_mobile_elements true
 # real
 nextflow run . -profile bunya --mode <mode> --input samplesheet.csv --outdir results
 ```

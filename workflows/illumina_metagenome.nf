@@ -31,6 +31,7 @@ include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
 include { CLEANIFIER_INDEX }            from '../modules/local/host_removal'
+include { FASTQ_GZIP_TEST }             from '../modules/local/validate'
 
 // resolve a possibly-null db param to a path or an empty list (for optional inputs)
 def optpath = { p -> p ? file(p, checkIfExists: true) : [] }
@@ -40,7 +41,8 @@ workflow ILLUMINA_METAGENOME {
     if (!params.input) { error "Mode 'illumina_metagenome' requires --input <samplesheet.csv>" }
 
     INPUT_CHECK(params.input, params.mode)
-    ch_reads = INPUT_CHECK.out.reads_short
+    FASTQ_GZIP_TEST(INPUT_CHECK.out.reads_short)
+    ch_reads = FASTQ_GZIP_TEST.out.reads
 
     // --- QC ---
     if (!params.skip_qc) {
