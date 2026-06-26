@@ -39,8 +39,8 @@ process SYLPH_PROFILE {
     label 'process_medium'
 
     input:
-    path(sketches, stageAs: 'sketch_*')
-    path(dbs)     // one or more .syldb files (chosen via params.sylph_db glob)
+    path(sketches)   // per-sample .sylsp (names kept — sylph detects sketches by .sylsp)
+    path(dbs)        // one or more .syldb files (chosen via params.sylph_db glob)
 
     output:
     path 'sylph_profile.tsv', emit: profile
