@@ -69,6 +69,7 @@
                 "cleanifier_db":       { "type": "string", "description": "Pre-built Cleanifier .filter index. If unset, host_ref is indexed with cleanifier index." },
                 "cleanifier_nobjects": { "type": "integer", "description": "Optional -n/--nobjects override for cleanifier index; defaults to estimated FASTA bases." },
                 "genomespot_models":   { "type": "string", "description": "GenomeSPOT models directory." },
+                "bakta_reference_proteins": { "type": "string", "description": "Optional proteins/GBFF file passed to Bakta --proteins." },
                 "download_db":         { "type": "string", "description": "Comma-list of DB names or 'all' (only with --mode download_dbs)." },
                 "db_outdir":           { "type": "string", "default": "databases", "description": "Where --mode download_dbs writes." }
             }
@@ -91,10 +92,19 @@
                 "skip_taxonomy":        { "type": "boolean" },
                 "skip_checkm":          { "type": "boolean" },
                 "skip_mobile_elements": { "type": "boolean" },
+                "skip_porechop":        { "type": "boolean" },
+                "skip_dorado_polish":   { "type": "boolean" },
+                "skip_polypolish":      { "type": "boolean" },
+                "skip_comparative":     { "type": "boolean" },
                 "run_nonpareil":        { "type": "boolean", "default": true },
                 "run_genomespot":       { "type": "boolean", "default": true },
                 "run_barrnap":          { "type": "boolean", "default": true },
-                "run_checkm1":          { "type": "boolean", "default": true }
+                "run_checkm1":          { "type": "boolean", "default": true },
+                "run_fastani":          { "type": "boolean", "default": true },
+                "run_parsnp":           { "type": "boolean", "default": true },
+                "run_panaroo":          { "type": "boolean", "default": true },
+                "run_chewbbaca":        { "type": "boolean", "default": true },
+                "run_tree":             { "type": "boolean", "default": true }
             }
         },
         "tool_choice": {
@@ -105,7 +115,47 @@
                 "catalogue_identities": { "type": "string", "default": "1.0,0.9", "description": "Comma-separated CD-HIT identities; first is the primary catalogue (used for CDS/membership/DRAM)." },
                 "rpkm_min_read_length": { "type": "integer", "default": 140, "description": "Minimum selected R1 read length retained for RPKM DIAMOND blastx." },
                 "core_alignment":      { "type": "string", "enum": ["parsnp", "snippy"], "default": "parsnp" },
-                "tree_builder":        { "type": "string", "enum": ["iqtree", "raxml"], "default": "iqtree" }
+                "tree_builder":        { "type": "string", "enum": ["iqtree", "raxml"], "default": "iqtree" },
+                "sylph_profile_args":  { "type": "string", "description": "Optional extra arguments for sylph profile." }
+            }
+        },
+        "nanopore": {
+            "title": "Nanopore options",
+            "type": "object",
+            "properties": {
+                "dorado_model": { "type": "string", "default": "dna_r10.4.1_e8.2_400bps_sup@v5.2.0" },
+                "dorado_barcode_kit": { "type": "string", "description": "Optional Dorado barcode kit name for POD5 basecalling/demux." },
+                "dorado_device": { "type": "string", "default": "auto" },
+                "force_dorado_basecalling": { "type": "boolean", "default": false },
+                "long_read_type": { "type": "string", "default": "ont_r10", "description": "Autocycler read type." },
+                "aviary_long_read_type": { "type": "string", "default": "ont_hq", "description": "Aviary --long-read-type for Nanopore metagenomes." }
+            }
+        },
+        "isolate_comparative": {
+            "title": "Isolate comparative options",
+            "type": "object",
+            "properties": {
+                "comparison_manifest": {
+                    "type": "string",
+                    "format": "file-path",
+                    "mimetype": "text/csv",
+                    "description": "Optional manifest assigning sample/reference rows to comparison groups."
+                },
+                "samples_include": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Optional sample id list used only for fallback samplesheet group comparisons."
+                },
+                "chewbbaca_training_file": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Optional chewBBACA/Prodigal training file."
+                },
+                "chewbbaca_cgmlst_thresholds": {
+                    "type": "string",
+                    "default": "0.90 0.95 0.99 1",
+                    "description": "Space-separated thresholds passed to chewBBACA ExtractCgMLST."
+                }
             }
         },
         "resources": {
@@ -132,6 +182,8 @@
         { "$ref": "#/defs/databases" },
         { "$ref": "#/defs/steps" },
         { "$ref": "#/defs/tool_choice" },
+        { "$ref": "#/defs/nanopore" },
+        { "$ref": "#/defs/isolate_comparative" },
         { "$ref": "#/defs/resources" },
         { "$ref": "#/defs/generic" }
     ]

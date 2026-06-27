@@ -1,34 +1,151 @@
 /*
- * NANOPORE_ISOLATE — SCAFFOLD (v1: wiring + TODO stubs)
- *
- * Target flow (per-sample then cross-sample within each `group`):
- *   pod5 -> dorado basecall/demux (optional) -> porechop -> fastplong (long_read_qc)
- *     -> autocycler assembly -> dorado polish
- *        -> polypolish  [ONLY if meta.has_short_reads — hybrid]
- *        -> dnaapler reorientation
- *     -> CheckM1/2 + GTDB-Tk (genome_taxonomy_qc)
- *     -> bakta + MLST + AMRFinderPlus + ISEScan (isolate_annotation)
- *     -> geNomad -> CheckV -> ANI cluster (mobile_elements)
- *     -> CoverM mapping (long + short where available)
- *   group-wise: fastANI ; chewBBACA cgMLST ; parsnp -> gubbins ; panaroo -> tree
+ * NANOPORE_ISOLATE — long-read/hybrid isolate workflow.
  */
 
-include { INPUT_CHECK } from '../subworkflows/local/input_check'
+include { INPUT_CHECK }           from '../subworkflows/local/input_check'
+include { LONG_READ_QC }          from '../subworkflows/local/long_read_qc'
+include { ISOLATE_ANNOTATION }    from '../subworkflows/local/isolate_annotation'
+include { ISOLATE_COMPARATIVE }   from '../subworkflows/local/isolate_comparative'
+include { GENOME_TAXONOMY_QC }    from '../subworkflows/local/genome_taxonomy_qc'
+include { MOBILE_ELEMENTS }       from '../subworkflows/local/mobile_elements'
+
+include { FASTP }                 from '../modules/nf-core/fastp/main'
+include { AUTOCYCLER_ASSEMBLE; POLYPOLISH; DNAAPLER } from '../modules/local/assembly_isolate'
+include { DORADO_POLISH }         from '../modules/local/long_reads'
+include { CHECKM2_PREDICT }       from '../modules/nf-core/checkm2/predict/main'
+include { CHECKM1_LINEAGEWF }     from '../modules/local/checkm1'
+include { COVERM_CONTIG as COVERM_CONTIG_ONT; COVERM_CONTIG as COVERM_CONTIG_SR } from '../modules/local/coverm'
+include { SEQKIT_STATS }          from '../modules/local/read_stats'
+include { FASTQ_GZIP_TEST }       from '../modules/local/validate'
+
+def optpath = { p -> p ? file(p, checkIfExists: true) : [] }
 
 workflow NANOPORE_ISOLATE {
 
     if (!params.input) { error "Mode 'nanopore_isolate' requires --input <samplesheet.csv>" }
+    if (!params.skip_comparative && params.skip_annotation) {
+        error "Isolate comparative analyses require Bakta GFF/FAA outputs. Disable --skip_annotation or rerun with --skip_comparative true."
+    }
 
     INPUT_CHECK(params.input, params.mode)
 
-    // Hybrid note: INPUT_CHECK.out.reads_short carries only samples that ALSO have
-    // Illumina reads; join it onto the polished assemblies to gate POLYPOLISH per-sample.
-    //
-    // TODO: (optional) DORADO_BASECALLER + DORADO_DEMUX from INPUT_CHECK.out.pod5
-    // TODO: LONG_READ_QC(porechop -> fastplong)
-    // TODO: ASSEMBLY_NANOPORE_ISO(autocycler -> dorado polish -> [polypolish if short] -> dnaapler)
-    // TODO: GENOME_TAXONOMY_QC ; ISOLATE_ANNOTATION ; MOBILE_ELEMENTS ; READ_MAPPING
-    // group-wise: COMPARATIVE ; CGMLST ; PHYLOGENOMICS ; PANGENOME
+    ch_direct_long = INPUT_CHECK.out.reads_long
+        .filter { meta, reads -> !params.force_dorado_basecalling || !meta.has_pod5 }
+    ch_pod5_basecall = INPUT_CHECK.out.pod5
+        .filter { meta, pod5 -> params.force_dorado_basecalling || !meta.has_long_reads }
 
-    log.warn "[gmaio] mode 'nanopore_isolate' is a SCAFFOLD — channel wiring is in place but processes are not yet implemented."
+    LONG_READ_QC(
+        ch_direct_long,
+        ch_pod5_basecall,
+        params.dorado_model,
+        params.dorado_barcode_kit ?: '',
+        params.dorado_device,
+        true,
+        !params.skip_porechop,
+        !params.skip_qc
+    )
+    ch_long = LONG_READ_QC.out.reads
+
+    ch_short = Channel.empty()
+    if (!params.skip_qc) {
+        FASTP(INPUT_CHECK.out.reads_short.map { meta, reads -> [ meta, reads, [] ] }, false, false, false)
+        ch_short = FASTP.out.reads
+    } else {
+        FASTQ_GZIP_TEST(INPUT_CHECK.out.reads_short)
+        ch_short = FASTQ_GZIP_TEST.out.reads
+    }
+
+    ch_assembly = Channel.empty()
+    if (!params.skip_assembly) {
+        AUTOCYCLER_ASSEMBLE(ch_long, params.long_read_type)
+        ch_assembly = AUTOCYCLER_ASSEMBLE.out.assembly
+
+        if (!params.skip_dorado_polish) {
+            DORADO_POLISH(
+                ch_assembly.join(ch_long).map { meta, assembly, reads -> [ meta, assembly, reads ] },
+                params.dorado_device
+            )
+            ch_assembly = DORADO_POLISH.out.assembly
+        }
+
+        if (!params.skip_polypolish) {
+            ch_hybrid_polish_in = ch_assembly
+                .join(ch_short)
+                .map { meta, assembly, reads -> [ meta, assembly, reads ] }
+            POLYPOLISH(ch_hybrid_polish_in)
+            ch_no_short = ch_assembly.filter { meta, assembly -> !meta.has_short_reads }
+            ch_assembly = ch_no_short.mix(POLYPOLISH.out.assembly)
+        }
+
+        DNAAPLER(ch_assembly)
+        ch_assembly = DNAAPLER.out.assembly
+    }
+
+    if (!params.skip_checkm) {
+        CHECKM2_PREDICT(
+            ch_assembly.map { meta, fasta -> [ meta, fasta ] },
+            [ [:], file(params.checkm2_db) ]
+        )
+    }
+    if (params.run_checkm1) {
+        CHECKM1_LINEAGEWF(ch_assembly.map { meta, fasta -> fasta }.collect())
+    }
+
+    GENOME_TAXONOMY_QC(
+        ch_assembly.map { meta, fasta -> fasta }.collect(),
+        ch_assembly,
+        file(params.gtdbtk_db, checkIfExists: true),
+        optpath(params.genomespot_models),
+        !params.skip_taxonomy,
+        params.run_genomespot,
+        params.run_barrnap
+    )
+
+    ISOLATE_ANNOTATION(
+        ch_assembly,
+        file(params.bakta_db, checkIfExists: true),
+        optpath(params.bakta_reference_proteins),
+        optpath(params.amrfinder_db),
+        !params.skip_annotation,
+        !params.skip_annotation,
+        !params.skip_annotation
+    )
+
+    if (!params.skip_mobile_elements) {
+        MOBILE_ELEMENTS(
+            ch_assembly,
+            file(params.genomad_db, checkIfExists: true),
+            file(params.checkv_db,  checkIfExists: true)
+        )
+    }
+
+    if (!params.skip_read_mapping) {
+        COVERM_CONTIG_ONT(
+            ch_assembly
+                .join(ch_long)
+                .map { meta, scaffolds, reads -> [ meta, reads, scaffolds ] }
+        )
+        COVERM_CONTIG_SR(
+            ch_assembly
+                .join(ch_short)
+                .map { meta, scaffolds, reads -> [ meta, reads, scaffolds ] }
+        )
+    }
+
+    if (!params.skip_comparative) {
+        ISOLATE_COMPARATIVE(
+            ch_assembly,
+            ISOLATE_ANNOTATION.out.gff,
+            ISOLATE_ANNOTATION.out.faa,
+            params.comparison_manifest ?: '',
+            params.samples_include ?: '',
+            params.chewbbaca_training_file ?: '',
+            params.chewbbaca_cgmlst_thresholds,
+            params.run_fastani,
+            params.run_parsnp,
+            params.run_panaroo,
+            params.run_chewbbaca,
+            params.run_tree
+        )
+    }
 }

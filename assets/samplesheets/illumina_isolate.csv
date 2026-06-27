@@ -1,0 +1,3 @@
+sample,group,fastq_1,fastq_2,long_reads,pod5_dir,host_ref
+ISO_SHORT_A,speciesA,tests/data/reads/sample_a_R1.fastq.gz,tests/data/reads/sample_a_R2.fastq.gz,,,
+ISO_SHORT_B,speciesB,tests/data/reads/sample_b_R1.fastq.gz,tests/data/reads/sample_b_R2.fastq.gz,,,

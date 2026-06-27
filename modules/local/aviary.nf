@@ -27,7 +27,8 @@ process AVIARY_RECOVER {
 
     script:
     def args   = task.ext.args ?: '--skip-singlem'
-    def reads_arg = meta.single_end ? "--longreads ${reads} --long-read-type ont" : "-1 ${reads[0]} -2 ${reads[1]}"
+    def long_read_type = task.ext.long_read_type ?: 'ont'
+    def reads_arg = meta.single_end ? "--longreads ${reads} --long-read-type ${long_read_type}" : "-1 ${reads[0]} -2 ${reads[1]}"
     """
     export GTDBTK_DATA_PATH=${gtdb_db}
     export CHECKM2_DATA_PATH=${checkm2_db}

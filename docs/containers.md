@@ -31,7 +31,9 @@ Only tools not packaged on biocontainers need local images:
 For the **Illumina-metagenome path you need no local builds** — host removal uses
 the `cleanifier` biocontainer. Supply either a prebuilt `--cleanifier_db` index
 or a FASTA with `--host_ref` so the pipeline can build the index. For Nanopore
-you'll need `dorado`.
+POD5 basecalling or Dorado polishing, you'll need `dorado`. The Dorado image used
+for polishing must also include `samtools`, because the wrapper sorts and indexes
+the Dorado aligner BAM before consensus polishing.
 
 > These local-`.sif` entries use `${params.container_base}`, which is only set by a
 > profile (e.g. `-profile local` → `<projectDir>/containers`). If you run without

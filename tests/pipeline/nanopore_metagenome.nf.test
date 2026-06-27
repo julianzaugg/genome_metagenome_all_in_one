@@ -1,0 +1,32 @@
+nextflow_pipeline {
+
+    name "nanopore_metagenome (stub)"
+    script "main.nf"
+
+    test("nanopore_metagenome stub run completes from long-read FASTQ") {
+
+        options "-stub"
+
+        when {
+            params {
+                mode   = "nanopore_metagenome"
+                input  = "${projectDir}/assets/samplesheets/nanopore_metagenome.csv"
+                outdir = "$outputDir"
+                skip_host_removal = true
+                run_nonpareil = false
+                run_genomespot = false
+                run_checkm1 = false
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert workflow.trace.tasks().any { it.name.contains('FASTPLONG') }
+            assert workflow.trace.tasks().any { it.name.contains('MYLOASM') }
+            assert workflow.trace.tasks().any { it.name.contains('AVIARY_RECOVER') }
+            assert workflow.trace.tasks().any { it.name.contains('COVERM_GENOME_ONT') }
+            assert workflow.trace.tasks().any { it.name.contains('GENOME_TAXONOMY_QC') || it.name.contains('GTDBTK_CLASSIFYWF') }
+            assert !workflow.trace.tasks().any { it.name.contains('DORADO_BASECALL') }
+        }
+    }
+}

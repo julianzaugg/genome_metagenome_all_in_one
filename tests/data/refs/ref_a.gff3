@@ -1,0 +1,2 @@
+##gff-version 3
+REF_A	RefSeq	CDS	1	12	.	+	0	ID=REF_A_00001;Name=ref_gene

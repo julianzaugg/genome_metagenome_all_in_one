@@ -1,0 +1,58 @@
+nextflow_pipeline {
+
+    name "nanopore_isolate (stub)"
+    script "main.nf"
+
+    test("nanopore_isolate stub run completes from long-read FASTQ and hybrid short reads") {
+
+        options "-stub"
+
+        when {
+            params {
+                mode   = "nanopore_isolate"
+                input  = "${projectDir}/assets/samplesheets/nanopore_isolate.csv"
+                outdir = "$outputDir"
+                run_genomespot = false
+                run_checkm1 = false
+                skip_mobile_elements = true
+                skip_comparative = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert workflow.trace.tasks().any { it.name.contains('AUTOCYCLER_ASSEMBLE') }
+            assert workflow.trace.tasks().any { it.name.contains('DORADO_POLISH') }
+            assert workflow.trace.tasks().any { it.name.contains('POLYPOLISH') }
+            assert workflow.trace.tasks().any { it.name.contains('DNAAPLER') }
+            assert workflow.trace.tasks().any { it.name.contains('COVERM_CONTIG_ONT') }
+            assert workflow.trace.tasks().any { it.name.contains('COVERM_CONTIG_SR') }
+            assert !workflow.trace.tasks().any { it.name.contains('DORADO_BASECALL') }
+        }
+    }
+
+    test("nanopore_isolate stub schedules Dorado basecalling for POD5-only samples") {
+
+        options "-stub"
+
+        when {
+            params {
+                mode   = "nanopore_isolate"
+                input  = "${projectDir}/assets/samplesheets/nanopore_isolate_pod5.csv"
+                outdir = "$outputDir"
+                run_genomespot = false
+                run_checkm1 = false
+                skip_mobile_elements = true
+                skip_comparative = true
+                skip_polypolish = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert workflow.trace.tasks().any { it.name.contains('DORADO_BASECALL') }
+            assert workflow.trace.tasks().any { it.name.contains('DORADO_DEMUX') }
+            assert workflow.trace.tasks().any { it.name.contains('AUTOCYCLER_ASSEMBLE') }
+        }
+    }
+}

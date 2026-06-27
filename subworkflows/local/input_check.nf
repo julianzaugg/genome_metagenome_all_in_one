@@ -58,11 +58,11 @@ workflow INPUT_CHECK {
 
     reads_long = ch_rows
         .filter { meta, row -> meta.has_long_reads }
-        .map    { meta, row -> [ meta, file(row.long_reads, checkIfExists: true) ] }
+        .map    { meta, row -> [ meta + [single_end: true], file(row.long_reads, checkIfExists: true) ] }
 
     pod5 = ch_rows
         .filter { meta, row -> meta.has_pod5 }
-        .map    { meta, row -> [ meta, file(row.pod5_dir, checkIfExists: true) ] }
+        .map    { meta, row -> [ meta + [single_end: true], file(row.pod5_dir, checkIfExists: true) ] }
 
     host = ch_rows
         .filter { meta, row -> is_set(row.host_ref) }

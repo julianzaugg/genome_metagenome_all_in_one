@@ -1,0 +1,35 @@
+nextflow_pipeline {
+
+    name "illumina_isolate (stub)"
+    script "main.nf"
+
+    test("illumina_isolate stub run completes with comparison manifest") {
+
+        options "-stub"
+
+        when {
+            params {
+                mode   = "illumina_isolate"
+                input  = "${projectDir}/assets/samplesheets/illumina_isolate.csv"
+                outdir = "$outputDir"
+                comparison_manifest = "${projectDir}/assets/samplesheets/isolate_comparison_manifest.csv"
+                run_genomespot = false
+                run_checkm1 = false
+                skip_mobile_elements = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert workflow.trace.tasks().any { it.name.contains('FASTP') }
+            assert workflow.trace.tasks().any { it.name.contains('SHOVILL') }
+            assert workflow.trace.tasks().any { it.name.contains('BAKTA_BAKTA') }
+            assert workflow.trace.tasks().any { it.name.contains('PREP_COMPARISON_GROUPS') }
+            assert workflow.trace.tasks().any { it.name.contains('FASTANI') }
+            assert workflow.trace.tasks().any { it.name.contains('PANAROO_RUN') }
+            assert workflow.trace.tasks().any { it.name.contains('CHEWBACCA_RUN') }
+            assert path("$outputDir/14_comparison_groups/speciesA").exists()
+            assert path("$outputDir/14_comparison_groups/mixed_overlap").exists()
+        }
+    }
+}

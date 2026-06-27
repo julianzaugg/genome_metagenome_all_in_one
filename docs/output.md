@@ -41,9 +41,43 @@ CheckM, dereplication, read mapping, and GTDB-Tk. Filenames follow
 `<sample>.<binner>.<bin_number>.fasta`, with `bin_contig_list.tsv` mapping each
 renamed bin to its contigs.
 
-The other modes get their own gapless `01..N` sequences when implemented (the
-isolate-track numbers currently in `conf/modules.config` are placeholders for
-the scaffolds).
+Nanopore metagenome reuses the metagenome output families, with Nanopore-specific
+read QC and assembly directories:
+
+```
+01_dorado_basecall/      # only when POD5 input is basecalled
+02_porechop/
+03_fastplong/
+07_myloasm/
+09_coverm_bins/         # minimap2-ont, 90% identity
+10_coverm_scaffolds_nanopore/
+```
+
+Isolate workflows publish assembly, QC, annotation, mobile-element, mapping, and
+comparative outputs under their tool names. Key directories:
+
+```
+05_autocycler/           # Nanopore isolate assembly
+06_dorado_polish/        # Nanopore isolate polishing, if enabled
+07_shovill/              # Illumina isolate assembly
+07_polypolish/           # hybrid Nanopore isolate polishing, if short reads exist
+08_dnaapler/             # Nanopore isolate chromosome orientation
+10_bakta/
+11_mlst/
+12_amrfinder/
+13_isescan/
+14_comparison_groups/    # materialized sample/reference groups
+14_panaroo/
+15_parsnp/
+16_gubbins/
+17_fastani/
+18_chewbacca/
+19_tree/
+```
+
+Nanopore isolate mapping emits separate CoverM outputs for long reads
+(`10_coverm_scaffolds_nanopore/`) and hybrid Illumina reads
+(`10_coverm_scaffolds_illumina/`) when both are present.
 
 ## Provenance
 
@@ -57,5 +91,9 @@ the scaffolds).
   counts per catalogue gene and sample.
 - `22_rpkm/singlem_sample_rpkm.tsv` and `22_rpkm/singlem_rpkm_means.tsv` —
   marker-level and per-sample SingleM normalization values.
+- `14_comparison_groups/<group>/entries.tsv` — isolate comparison membership,
+  including references and the chosen Parsnp reference.
+- `18_chewbacca/<group>_chewbbaca/genome_hash_map.tsv` — mapping from original
+  genome ids to chewBBACA-safe FASTA names.
 
 Paths/numbers are set in `conf/modules.config` and easily changed.

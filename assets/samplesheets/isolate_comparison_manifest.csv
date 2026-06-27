@@ -1,0 +1,6 @@
+comparison_group,entry_type,id,fasta,gff,faa,parsnp_reference
+speciesA,sample,ISO_SHORT_A,,,,false
+speciesA,reference,REF_A,tests/data/refs/ref_a.fasta,tests/data/refs/ref_a.gff3,tests/data/refs/ref_a.faa,true
+mixed_overlap,sample,ISO_SHORT_A,,,,false
+mixed_overlap,sample,ISO_SHORT_B,,,,false
+mixed_overlap,reference,REF_A,tests/data/refs/ref_a.fasta,tests/data/refs/ref_a.gff3,tests/data/refs/ref_a.faa,true

@@ -1,0 +1,3 @@
+sample,group,fastq_1,fastq_2,long_reads,pod5_dir,host_ref
+NANO_META_A,gut,,,tests/data/reads/iso1_long.fastq.gz,,
+NANO_META_B,gut,,,tests/data/reads/iso2_long.fastq.gz,,

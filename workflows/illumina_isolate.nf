@@ -1,37 +1,115 @@
 /*
- * ILLUMINA_ISOLATE — SCAFFOLD (v1: wiring + TODO stubs)
- *
- * Target flow (per-sample then cross-sample within each `group`):
- *   fastp QC -> shovill assembly
- *     -> CheckM1/2 + GTDB-Tk (genome_taxonomy_qc)
- *     -> bakta + MLST + AMRFinderPlus + ISEScan (isolate_annotation)
- *     -> geNomad -> CheckV -> ANI cluster (mobile_elements)
- *     -> CoverM mapping
- *   group-wise (collect()/groupTuple on meta.group):
- *     -> fastANI all-vs-all (comparative)
- *     -> chewBBACA cgMLST
- *     -> parsnp -> gubbins (phylogenomics)
- *     -> panaroo -> core-gene tree (pangenome)
+ * ILLUMINA_ISOLATE — short-read isolate workflow.
  */
 
-include { INPUT_CHECK } from '../subworkflows/local/input_check'
+include { INPUT_CHECK }           from '../subworkflows/local/input_check'
+include { ISOLATE_ANNOTATION }    from '../subworkflows/local/isolate_annotation'
+include { ISOLATE_COMPARATIVE }   from '../subworkflows/local/isolate_comparative'
+include { GENOME_TAXONOMY_QC }    from '../subworkflows/local/genome_taxonomy_qc'
+include { MOBILE_ELEMENTS }       from '../subworkflows/local/mobile_elements'
+
+include { FASTP }                  from '../modules/nf-core/fastp/main'
+include { SHOVILL }                from '../modules/local/assembly_isolate'
+include { CHECKM2_PREDICT }        from '../modules/nf-core/checkm2/predict/main'
+include { CHECKM1_LINEAGEWF }      from '../modules/local/checkm1'
+include { COVERM_CONTIG }          from '../modules/local/coverm'
+include { SEQKIT_STATS }           from '../modules/local/read_stats'
+include { FASTQ_GZIP_TEST }        from '../modules/local/validate'
+
+def optpath = { p -> p ? file(p, checkIfExists: true) : [] }
 
 workflow ILLUMINA_ISOLATE {
 
     if (!params.input) { error "Mode 'illumina_isolate' requires --input <samplesheet.csv>" }
+    if (!params.skip_assembly && params.skip_qc) {
+        log.warn "[gmaio] Illumina isolate assembly will use raw reads because --skip_qc true."
+    }
+    if (!params.skip_comparative && params.skip_annotation) {
+        error "Isolate comparative analyses require Bakta GFF/FAA outputs. Disable --skip_annotation or rerun with --skip_comparative true."
+    }
 
     INPUT_CHECK(params.input, params.mode)
+    FASTQ_GZIP_TEST(INPUT_CHECK.out.reads_short)
+    ch_reads = FASTQ_GZIP_TEST.out.reads
+    ch_read_stats = ch_reads.map { meta, reads -> [ meta, 'raw', reads ] }
 
-    // Channels: INPUT_CHECK.out.reads_short / .host / .meta
-    // TODO: SHORT_READ_QC(fastp)
-    // TODO: ASSEMBLY_ILLUMINA_ISO(shovill)
-    // TODO: GENOME_TAXONOMY_QC(gtdbtk + checkm1/2)
-    // TODO: ISOLATE_ANNOTATION(bakta + mlst + amrfinderplus + isescan)
-    // TODO: MOBILE_ELEMENTS(genomad -> checkv -> ANI cluster)
-    // TODO: READ_MAPPING(coverm)
-    // group-wise:
-    // TODO: COMPARATIVE(fastani)  ; CGMLST(chewbacca)
-    // TODO: PHYLOGENOMICS(parsnp -> gubbins)  ; PANGENOME(panaroo -> tree)
+    if (!params.skip_qc) {
+        FASTP(ch_reads.map { meta, reads -> [ meta, reads, [] ] }, false, false, false)
+        ch_qc = FASTP.out.reads
+        ch_read_stats = ch_read_stats.mix(FASTP.out.reads.map { meta, reads -> [ meta, 'fastp', reads ] })
+    } else {
+        ch_qc = ch_reads
+    }
+    SEQKIT_STATS(ch_read_stats)
 
-    log.warn "[gmaio] mode 'illumina_isolate' is a SCAFFOLD — channel wiring is in place but processes are not yet implemented."
+    ch_assembly = Channel.empty()
+    if (!params.skip_assembly) {
+        SHOVILL(ch_qc)
+        ch_assembly = SHOVILL.out.assembly
+    }
+
+    ch_checkm2_tsv = Channel.empty()
+    if (!params.skip_checkm) {
+        CHECKM2_PREDICT(
+            ch_assembly.map { meta, fasta -> [ meta, fasta ] },
+            [ [:], file(params.checkm2_db) ]
+        )
+        ch_checkm2_tsv = CHECKM2_PREDICT.out.checkm2_tsv
+    }
+    if (params.run_checkm1) {
+        CHECKM1_LINEAGEWF(ch_assembly.map { meta, fasta -> fasta }.collect())
+    }
+
+    GENOME_TAXONOMY_QC(
+        ch_assembly.map { meta, fasta -> fasta }.collect(),
+        ch_assembly,
+        file(params.gtdbtk_db, checkIfExists: true),
+        optpath(params.genomespot_models),
+        !params.skip_taxonomy,
+        params.run_genomespot,
+        params.run_barrnap
+    )
+
+    ISOLATE_ANNOTATION(
+        ch_assembly,
+        file(params.bakta_db, checkIfExists: true),
+        optpath(params.bakta_reference_proteins),
+        optpath(params.amrfinder_db),
+        !params.skip_annotation,
+        !params.skip_annotation,
+        !params.skip_annotation
+    )
+
+    if (!params.skip_mobile_elements) {
+        MOBILE_ELEMENTS(
+            ch_assembly,
+            file(params.genomad_db, checkIfExists: true),
+            file(params.checkv_db,  checkIfExists: true)
+        )
+    }
+
+    if (!params.skip_read_mapping) {
+        COVERM_CONTIG(
+            ch_assembly
+                .join(ch_qc)
+                .map { meta, scaffolds, reads -> [ meta, reads, scaffolds ] }
+        )
+    }
+
+    if (!params.skip_comparative) {
+        ISOLATE_COMPARATIVE(
+            ch_assembly,
+            ISOLATE_ANNOTATION.out.gff,
+            ISOLATE_ANNOTATION.out.faa,
+            params.comparison_manifest ?: '',
+            params.samples_include ?: '',
+            params.chewbbaca_training_file ?: '',
+            params.chewbbaca_cgmlst_thresholds,
+            params.run_fastani,
+            params.run_parsnp,
+            params.run_panaroo,
+            params.run_chewbbaca,
+            params.run_tree
+        )
+    }
 }

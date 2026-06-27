@@ -5,9 +5,9 @@ A single Nextflow (DSL2) pipeline consolidating four analysis tracks:
 | `--mode`               | Platform | Sample type | Status (v1)        |
 |------------------------|----------|-------------|--------------------|
 | `illumina_metagenome`  | Illumina | metagenome  | **built end-to-end** |
-| `nanopore_metagenome`  | Nanopore | metagenome  | scaffold (stubs)   |
-| `illumina_isolate`     | Illumina | isolate     | scaffold (stubs)   |
-| `nanopore_isolate`     | Nanopore | isolate     | scaffold (stubs)   |
+| `nanopore_metagenome`  | Nanopore | metagenome  | **built end-to-end** |
+| `illumina_isolate`     | Illumina | isolate     | **built end-to-end** |
+| `nanopore_isolate`     | Nanopore | isolate     | **built end-to-end** |
 
 It is **nf-core-style but standalone** — modules/subworkflows layout, samplesheet
 schema, `nf-schema` param validation — without nf-core governance. Reuses
@@ -23,7 +23,8 @@ on a shared path. See
 
 ```bash
 # Stub dry-run (no real tools, validates wiring)
-nextflow run . -profile test --mode illumina_metagenome -stub
+nextflow run . -profile test --mode illumina_metagenome \
+  --input assets/samplesheets/illumina_metagenome.csv -stub
 
 # Real run on the local /srv server; host removal is enabled by default
 nextflow run . -profile local --mode illumina_metagenome \
