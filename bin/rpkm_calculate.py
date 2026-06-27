@@ -4,6 +4,8 @@
 import argparse
 import csv
 import math
+import os
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -50,11 +52,18 @@ def marker_name_from_blast(path):
     return name[:-10] if name.endswith("_blast.tsv") else Path(path).stem
 
 
+def iter_blast_paths(blast_dir):
+    for root, _, files in os.walk(blast_dir, followlinks=True):
+        for filename in sorted(files):
+            if filename.endswith("_blast.tsv"):
+                yield Path(root) / filename
+
+
 def calculate_singlem(singlem_blast_dir, marker_lengths):
     sample_marker_counts = defaultdict(int)
     sample_totals = defaultdict(int)
 
-    for blast_path in sorted(Path(singlem_blast_dir).rglob("*_blast.tsv")):
+    for blast_path in iter_blast_paths(singlem_blast_dir):
         marker = marker_name_from_blast(blast_path)
         for row in read_tsv(blast_path):
             sample = row.get("sample")
@@ -129,7 +138,7 @@ def calculate_gene_tables(gene_blast, singlem_means):
         norm_rows.append(norm_row)
 
     fields = ["Gene_ID"] + ordered_samples
-    return fields, norm_rows, count_rows
+    return fields, norm_rows, count_rows, ordered_samples
 
 
 def main():
@@ -145,13 +154,30 @@ def main():
 
     marker_lengths = load_marker_lengths(args.marker_lengths)
     singlem_rows, mean_rows, singlem_means = calculate_singlem(args.singlem_blast_dir, marker_lengths)
-    gene_fields, norm_rows, count_rows = calculate_gene_tables(args.gene_blast, singlem_means)
+    gene_fields, norm_rows, count_rows, gene_samples = calculate_gene_tables(args.gene_blast, singlem_means)
+
+    missing_normalisers = [
+        sample for sample in gene_samples
+        if sample not in singlem_means or singlem_means.get(sample, 0.0) <= 0.0
+    ]
+    if missing_normalisers:
+        samples = ", ".join(missing_normalisers)
+        print(
+            "ERROR: No positive SingleM marker RPKM normalizer was calculated for "
+            f"sample(s): {samples}. Check 22_rpkm/singlem_blast for marker hits, "
+            "or provide matching prebuilt marker databases and marker stats with "
+            "--rpkm_singlem_marker_dbs and --rpkm_singlem_marker_lengths.",
+            file=sys.stderr,
+        )
+        return 1
 
     write_tsv(outdir / "singlem_sample_rpkm.tsv", ["sample", "Marker_gene", "rpkm"], singlem_rows)
     write_tsv(outdir / "singlem_rpkm_means.tsv", ["sample", "Mean_rpkm"], mean_rows)
     write_tsv(outdir / "gene_catalogue_rpkm_per_gene_normalised.tsv", gene_fields, norm_rows)
     write_tsv(outdir / "gene_catalogue_mapped_reads_per_gene.tsv", gene_fields, count_rows)
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -104,6 +104,47 @@ process RPKM_SINGLEM_MARKERS {
     """
 }
 
+process RPKM_PREBUILT_SINGLEM_MARKERS {
+    label 'process_low'
+
+    input:
+    path(marker_dbs, stageAs: 'prebuilt_marker_dbs')
+    path(marker_lengths, stageAs: 'prebuilt_marker_lengths.tsv')
+
+    output:
+    path 'singlem_marker_diamond',     emit: marker_dbs
+    path 'singlem_marker_lengths.tsv', emit: marker_lengths
+    path 'versions.yml',               emit: versions
+
+    script:
+    """
+    set -euo pipefail
+
+    mkdir -p singlem_marker_diamond
+    db_count=0
+    for db in prebuilt_marker_dbs/*.dmnd; do
+        [ -f "\${db}" ] || continue
+        cp -L "\${db}" "singlem_marker_diamond/\$(basename "\${db}")"
+        db_count=\$((db_count + 1))
+    done
+    [ "\${db_count}" -gt 0 ] || {
+        echo "[RPKM_PREBUILT_SINGLEM_MARKERS] No .dmnd files found in ${marker_dbs}" >&2
+        exit 1
+    }
+
+    cp -L prebuilt_marker_lengths.tsv singlem_marker_lengths.tsv
+    awk -F '\\t' 'NR==1 {
+        for (i=1; i<=NF; i++) cols[\$i]=1
+        if (!("Gene" in cols) || !("avg_len" in cols)) exit 1
+    }' singlem_marker_lengths.tsv || {
+        echo "[RPKM_PREBUILT_SINGLEM_MARKERS] Marker lengths file must contain Gene and avg_len columns" >&2
+        exit 1
+    }
+
+    echo '"${task.process}": {bash: true}' > versions.yml
+    """
+}
+
 process RPKM_DIAMOND_MAKEDB {
     label 'process_low'
 

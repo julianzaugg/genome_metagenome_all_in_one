@@ -191,6 +191,8 @@ workflow ILLUMINA_METAGENOME {
             ch_rpkm_r1,
             GENE_CATALOGUE.out.catalogue,
             file(params.singlem_metapackage, checkIfExists: true),
+            optpath(params.rpkm_singlem_marker_dbs),
+            optpath(params.rpkm_singlem_marker_lengths),
             params.rpkm_min_read_length
         )
     }

@@ -93,6 +93,9 @@ RPKM is on by default for Illumina metagenomes and requires fastp, assembly, and
 the gene catalogue. It uses one selected R1 stream: fastp + host-filtered reads
 when host removal runs, otherwise fastp reads. Tune the DIAMOND input length
 filter with `--rpkm_min_read_length` or disable the stage with `--skip_rpkm true`.
+If available, provide the prebuilt SingleM marker DIAMOND directory and marker
+stats TSV with `--rpkm_singlem_marker_dbs` and
+`--rpkm_singlem_marker_lengths`.
 
 Raw gzipped FASTQs are checked before QC/read profiling with `gzip -t` and
 `seqkit stats`. SingleM `Unexpected line format for DIAMOND output line` errors

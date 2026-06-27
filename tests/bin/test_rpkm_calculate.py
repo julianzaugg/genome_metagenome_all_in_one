@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import csv
+import os
 import subprocess
 import sys
 import tempfile
@@ -74,6 +75,91 @@ class RpkmCalculateTest(unittest.TestCase):
 
             normalised = read_tsv(outdir / "gene_catalogue_rpkm_per_gene_normalised.tsv")
             self.assertEqual({row["Gene_ID"] for row in normalised}, {"geneA", "geneB"})
+
+    def test_singlem_blast_symlinked_directories_are_followed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            real_singlem_dir = tmp / "real_singlem" / "S1.singlem_marker_blast"
+            staged_singlem_dir = tmp / "staged_singlem"
+            real_singlem_dir.mkdir(parents=True)
+            staged_singlem_dir.mkdir()
+            marker_lengths = tmp / "marker_lengths.tsv"
+            gene_blast = tmp / "gene_blast.tsv"
+            outdir = tmp / "out"
+
+            marker_lengths.write_text(
+                "Gene\tnum_seqs\tsum_len\tmin_len\tavg_len\tmax_len\n"
+                "S3.marker\t1\t300\t100\t100\t100\n"
+            )
+            (real_singlem_dir / "S3.marker_blast.tsv").write_text(
+                HEADER
+                + "S1\tread1\tmarker_hit\tmarker\t100\t50\t0\t0\t1\t50\t1\t50\t1e-20\t100\t150\t300\t0.333\t0.167\n"
+            )
+            os.symlink(real_singlem_dir, staged_singlem_dir / "S1.singlem_marker_blast")
+            gene_blast.write_text(
+                HEADER
+                + "S1\tread1\tgeneA\tgeneA\t100\t90\t0\t0\t1\t90\t1\t90\t1e-20\t100\t150\t300\t0.600\t0.300\n"
+            )
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--singlem-blast-dir",
+                    str(staged_singlem_dir),
+                    "--marker-lengths",
+                    str(marker_lengths),
+                    "--gene-blast",
+                    str(gene_blast),
+                    "--outdir",
+                    str(outdir),
+                ],
+                check=True,
+            )
+
+            means = read_tsv(outdir / "singlem_rpkm_means.tsv")
+            self.assertEqual(means[0]["sample"], "S1")
+            self.assertGreater(float(means[0]["Mean_rpkm"]), 0)
+
+    def test_fails_when_gene_hits_have_no_singlem_normalizer(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            singlem_dir = tmp / "singlem"
+            singlem_dir.mkdir()
+            marker_lengths = tmp / "marker_lengths.tsv"
+            gene_blast = tmp / "gene_blast.tsv"
+            outdir = tmp / "out"
+
+            marker_lengths.write_text(
+                "Gene\tnum_seqs\tsum_len\tmin_len\tavg_len\tmax_len\n"
+                "S3.marker\t1\t300\t100\t100\t100\n"
+            )
+            (singlem_dir / "S3.marker_blast.tsv").write_text(HEADER)
+            gene_blast.write_text(
+                HEADER
+                + "S1\tread1\tgeneA\tgeneA\t100\t90\t0\t0\t1\t90\t1\t90\t1e-20\t100\t150\t300\t0.600\t0.300\n"
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--singlem-blast-dir",
+                    str(singlem_dir),
+                    "--marker-lengths",
+                    str(marker_lengths),
+                    "--gene-blast",
+                    str(gene_blast),
+                    "--outdir",
+                    str(outdir),
+                ],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("No positive SingleM marker RPKM normalizer", result.stderr)
 
 
 if __name__ == "__main__":

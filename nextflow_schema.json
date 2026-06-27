@@ -57,6 +57,8 @@
                 "checkm2_db":          { "type": "string", "description": "CheckM2 database dir (CHECKM2_DATA_PATH)." },
                 "checkm1_db":          { "type": "string", "description": "CheckM1 database dir." },
                 "singlem_metapackage": { "type": "string", "description": "SingleM metapackage (SINGLEM_METAPACKAGE_PATH)." },
+                "rpkm_singlem_marker_dbs": { "type": "string", "description": "Optional directory of prebuilt SingleM marker DIAMOND .dmnd files for RPKM normalization." },
+                "rpkm_singlem_marker_lengths": { "type": "string", "description": "Optional SingleM marker stats TSV for RPKM normalization; must contain Gene and avg_len columns." },
                 "sylph_db":            { "type": "string", "description": "Sylph database — path or glob of the .syldb file(s) to profile against." },
                 "sylph_tax_metadata":  { "type": "string", "description": "sylph-tax metadata path/glob matching the selected sylph_db files; set to enable taxonomy + merge." },
                 "bakta_db":            { "type": "string", "description": "Bakta database dir." },
