@@ -44,7 +44,11 @@
             "properties": {
                 "container_base": {
                     "type": "string",
-                    "description": "Directory holding local .sif images for bespoke tools (set per-profile)."
+                    "description": "Directory holding local .sif images for bespoke tools."
+                },
+                "aviary_container": {
+                    "type": "string",
+                    "description": "Optional explicit Aviary .sif path. If unset, AVIARY_RECOVER uses ${container_base}/aviary_0.13.0.sif."
                 }
             }
         },

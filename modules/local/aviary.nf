@@ -29,7 +29,22 @@ process AVIARY_RECOVER {
     def args   = task.ext.args ?: '--skip-singlem'
     def long_read_type = task.ext.long_read_type ?: 'ont'
     def reads_arg = meta.single_end ? "--longreads ${reads} --long-read-type ${long_read_type}" : "-1 ${reads[0]} -2 ${reads[1]}"
+    def aviary_container_hint = params.aviary_container ?: "${params.container_base}/aviary_0.13.0.sif"
     """
+    if ! command -v pixi >/dev/null 2>&1; then
+        cat >&2 <<'EOF'
+ERROR: Aviary 0.13.0 requires pixi inside the AVIARY_RECOVER runtime image.
+The quay.io/biocontainers/aviary:0.13.0--pyhdfd78af_0 image contains the Aviary
+CLI but not pixi, so Aviary's internal Snakemake rules fail with:
+  /usr/bin/bash: line 1: pixi: command not found
+
+Build/provide an upstream-style Aviary SIF with pixi and prebuilt Aviary
+environments, then set --aviary_container if it is not at:
+  ${aviary_container_hint}
+EOF
+        exit 127
+    fi
+
     export GTDBTK_DATA_PATH=${gtdb_db}
     export CHECKM2_DATA_PATH=${checkm2_db}
     export EGGNOG_DATA_DIR=${eggnog_db}
