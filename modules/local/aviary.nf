@@ -53,8 +53,13 @@ EOF
     # Resolve absolute paths — aviary's internal Snakemake changes working
     # directory, so staged relative paths (e.g. "CheckM2_database") break.
     gtdb_abs=\$(realpath ${gtdb_db})
-    checkm2_abs=\$(realpath ${checkm2_db})
     eggnog_abs=\$(realpath ${eggnog_db})
+    # aviary passes --checkm2-db-path straight to diamond --db, which needs the
+    # .dmnd file, not the directory. Accept either form.
+    checkm2_abs=\$(realpath ${checkm2_db})
+    if [ -d "\${checkm2_abs}" ]; then
+        checkm2_abs=\$(find "\${checkm2_abs}" -name "*.dmnd" | head -1)
+    fi
 
     # CHECKM2DB is what checkm2 actually reads; CHECKM2_DATA_PATH is not used.
     export CHECKM2DB="\${checkm2_abs}"
