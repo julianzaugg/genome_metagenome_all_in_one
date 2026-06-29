@@ -53,16 +53,17 @@ EOF
     # Resolve absolute paths — aviary's internal Snakemake changes working
     # directory, so staged relative paths (e.g. "CheckM2_database") break.
     gtdb_abs=\$(realpath ${gtdb_db})
-    eggnog_abs=\$(realpath ${eggnog_db})
-    # aviary passes --checkm2-db-path straight to diamond --db, which needs the
-    # .dmnd file, not the directory. Accept either form.
     checkm2_abs=\$(realpath ${checkm2_db})
+    eggnog_abs=\$(realpath ${eggnog_db})
+    # aviary --checkm2-db-path wants the directory; CHECKM2DB env var (read by
+    # checkm2 directly) must point to the .dmnd file. Accept either form in params.
     if [ -d "\${checkm2_abs}" ]; then
-        checkm2_abs=\$(find "\${checkm2_abs}" -name "*.dmnd" | head -1)
+        checkm2_dmnd=\$(find "\${checkm2_abs}" -name "*.dmnd" | head -1)
+    else
+        checkm2_dmnd="\${checkm2_abs}"
+        checkm2_abs=\$(dirname "\${checkm2_abs}")
     fi
-
-    # CHECKM2DB is what checkm2 actually reads; CHECKM2_DATA_PATH is not used.
-    export CHECKM2DB="\${checkm2_abs}"
+    export CHECKM2DB="\${checkm2_dmnd}"
     export GTDBTK_DATA_PATH="\${gtdb_abs}"
     export EGGNOG_DATA_DIR="\${eggnog_abs}"
     export SINGLEM_METAPACKAGE_PATH=\${SINGLEM_METAPACKAGE_PATH:-not_required_with_skip_singlem}
