@@ -2,7 +2,7 @@ Bootstrap: docker
 From: python:3.11-slim
 
 %post
-    apt-get update -qq && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+    apt-get update -qq && apt-get install -y --no-install-recommends git procps && rm -rf /var/lib/apt/lists/*
     pip install --no-cache-dir "git+https://github.com/cultivarium/GenomeSPOT.git@v1.0.1"
 
 %runscript
