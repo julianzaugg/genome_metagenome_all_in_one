@@ -94,14 +94,12 @@ EOF
         rest="\${bin_file_basename#*.}"
         method="\${method%_bins}"
 
-        if [[ "\$rest" == "\$bin_file_basename" ]]; then
-            bin_file_basename="\${method}"
-        elif [[ "\$rest" == "binned_contigs" ]]; then
+        [[ "\$rest" == tsv_* ]] && rest="\${rest#tsv_}"
+
+        if [[ "\$rest" == "\$bin_file_basename" || "\$rest" == "binned_contigs" ]]; then
             bin_file_basename="\${method}"
         elif [[ "\$rest" == binned_contigs.* ]]; then
             bin_file_basename="\${method}.\${rest#binned_contigs.}"
-        elif [[ "\$rest" == tsv_* ]]; then
-            bin_file_basename="\${method}.\${rest#tsv_}"
         else
             bin_file_basename="\${method}.\${rest}"
         fi
