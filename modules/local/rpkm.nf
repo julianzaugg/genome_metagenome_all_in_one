@@ -52,9 +52,9 @@ process RPKM_SINGLEM_MARKERS {
 
     mkdir -p singlem_marker_diamond
 
-    package_root="${metapackage}"
-    if [ -d "${metapackage}/payload_directory" ]; then
-        package_root="${metapackage}/payload_directory"
+    package_root=\$(realpath "${metapackage}")
+    if [ -d "\${package_root}/payload_directory" ]; then
+        package_root="\${package_root}/payload_directory"
     fi
 
     found_dmnd=0
