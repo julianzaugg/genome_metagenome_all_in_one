@@ -23,8 +23,9 @@ process CHECKM2_PREDICT {
     def args = task.ext.args ?: ''
     prefix = task.ext.prefix ?: "${meta.id}"
     """
-    # --database_path requires the .dmnd file; resolve it if a directory was staged
-    db_path="${db}"
+    # --database_path requires the .dmnd file; resolve it if a directory was staged.
+    # realpath first so find traverses the actual path, not the staged symlink.
+    db_path=\$(realpath "${db}")
     if [ -d "\${db_path}" ]; then
         db_path=\$(find "\${db_path}" -name "*.dmnd" | head -1)
     fi
