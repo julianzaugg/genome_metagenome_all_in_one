@@ -21,7 +21,6 @@ process AVIARY_RECOVER {
     output:
     tuple val(meta), path("${meta.id}/renamed_bins/*.fasta"),             emit: bins
     tuple val(meta), path("${meta.id}/renamed_bins/bin_contig_list.tsv"), emit: bin_contig_list
-    tuple val(meta), path("${meta.id}/bins/**/*.fasta", optional: true),  emit: raw_bins
     tuple val(meta), path("${meta.id}"),                                  emit: recover_dir
     path 'versions.yml',                                                  emit: versions
 
