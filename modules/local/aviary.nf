@@ -79,7 +79,7 @@ EOF
         --pplacer_threads ${Math.max(1, (task.cpus as int).intdiv(2))} \\
         --max_memory ${task.memory.toGiga()} \\
         --gtdb_path "\${gtdb_abs}" \\
-        --checkm2-db-path "\${checkm2_abs}" \\
+        --checkm2-db-path "\${checkm2_dmnd}" \\
         --eggnog-db-path "\${eggnog_abs}"
 
     mkdir -p ${meta.id}/renamed_bins
