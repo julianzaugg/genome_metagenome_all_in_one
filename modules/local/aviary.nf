@@ -50,9 +50,16 @@ EOF
     export PATH="/aviary/.pixi/envs/default/bin:\${PATH}"
     export CONDA_PREFIX="/aviary/.pixi/envs/default"
 
-    export GTDBTK_DATA_PATH=${gtdb_db}
-    export CHECKM2_DATA_PATH=${checkm2_db}
-    export EGGNOG_DATA_DIR=${eggnog_db}
+    # Resolve absolute paths — aviary's internal Snakemake changes working
+    # directory, so staged relative paths (e.g. "CheckM2_database") break.
+    gtdb_abs=\$(realpath ${gtdb_db})
+    checkm2_abs=\$(realpath ${checkm2_db})
+    eggnog_abs=\$(realpath ${eggnog_db})
+
+    # CHECKM2DB is what checkm2 actually reads; CHECKM2_DATA_PATH is not used.
+    export CHECKM2DB="\${checkm2_abs}"
+    export GTDBTK_DATA_PATH="\${gtdb_abs}"
+    export EGGNOG_DATA_DIR="\${eggnog_abs}"
     export SINGLEM_METAPACKAGE_PATH=\${SINGLEM_METAPACKAGE_PATH:-not_required_with_skip_singlem}
     export METABULI_DB_PATH=\${METABULI_DB_PATH:-not_required_by_gmaio_aviary_recover}
     # Redirect pixi's repodata cache off NFS (Bunya home dirs) onto local /tmp
@@ -65,9 +72,9 @@ EOF
         --max_threads ${task.cpus} \\
         --pplacer_threads ${Math.max(1, (task.cpus as int).intdiv(2))} \\
         --max_memory ${task.memory.toGiga()} \\
-        --gtdb_path ${gtdb_db} \\
-        --checkm2-db-path ${checkm2_db} \\
-        --eggnog-db-path ${eggnog_db}
+        --gtdb_path "\${gtdb_abs}" \\
+        --checkm2-db-path "\${checkm2_abs}" \\
+        --eggnog-db-path "\${eggnog_abs}"
 
     mkdir -p ${meta.id}/renamed_bins
     shopt -s nullglob
