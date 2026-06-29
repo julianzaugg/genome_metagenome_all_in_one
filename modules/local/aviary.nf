@@ -89,10 +89,22 @@ EOF
         bin_file_basename="\${bin_file_basename%.fasta}"
         bin_file_basename="\${bin_file_basename%.fna}"
         bin_file_basename="\${bin_file_basename%.fa}"
-        # Replace .tsv_ separator (new aviary naming) with .
-        bin_file_basename="\${bin_file_basename/.tsv_/.}"
-        # Strip generic .binned_contigs suffix (method name alone is unique for single-bin methods)
-        bin_file_basename="\${bin_file_basename%.binned_contigs}"
+
+        method="\${bin_file_basename%%.*}"
+        rest="\${bin_file_basename#*.}"
+        method="\${method%_bins}"
+
+        if [[ "\$rest" == "\$bin_file_basename" ]]; then
+            bin_file_basename="\${method}"
+        elif [[ "\$rest" == "binned_contigs" ]]; then
+            bin_file_basename="\${method}"
+        elif [[ "\$rest" == binned_contigs.* ]]; then
+            bin_file_basename="\${method}.\${rest#binned_contigs.}"
+        elif [[ "\$rest" == tsv_* ]]; then
+            bin_file_basename="\${method}.\${rest#tsv_}"
+        else
+            bin_file_basename="\${method}.\${rest}"
+        fi
 
         cp -L "\$bin_file" "${meta.id}/renamed_bins/${meta.id}.\${bin_file_basename}.fasta"
     done
