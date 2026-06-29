@@ -20,32 +20,41 @@ workflow LONG_READ_QC {
 
     main:
     ch_raw = direct_reads
+    ch_versions = Channel.empty()
 
     if (run_basecalling) {
         DORADO_BASECALL(pod5_for_basecall, dorado_model, dorado_barcode_kit, dorado_device)
         DORADO_DEMUX(DORADO_BASECALL.out.bam)
         ch_raw = ch_raw.mix(DORADO_DEMUX.out.reads)
+        ch_versions = ch_versions
+            .mix(DORADO_BASECALL.out.versions)
+            .mix(DORADO_DEMUX.out.versions)
     }
 
     FASTQ_GZIP_TEST(ch_raw)
     ch_reads = FASTQ_GZIP_TEST.out.reads
     ch_read_stats = ch_reads.map { meta, reads -> [ meta, 'raw_long', reads ] }
+    ch_versions = ch_versions.mix(FASTQ_GZIP_TEST.out.versions)
 
     if (run_porechop) {
         PORECHOP(ch_reads)
         ch_reads = PORECHOP.out.reads
         ch_read_stats = ch_read_stats.mix(PORECHOP.out.reads.map { meta, reads -> [ meta, 'porechop', reads ] })
+        ch_versions = ch_versions.mix(PORECHOP.out.versions)
     }
 
     if (run_fastplong) {
         FASTPLONG(ch_reads)
         ch_reads = FASTPLONG.out.reads
         ch_read_stats = ch_read_stats.mix(FASTPLONG.out.reads.map { meta, reads -> [ meta, 'fastplong', reads ] })
+        ch_versions = ch_versions.mix(FASTPLONG.out.versions)
     }
 
     SEQKIT_STATS(ch_read_stats)
+    ch_versions = ch_versions.mix(SEQKIT_STATS.out.versions)
 
     emit:
-    reads = ch_reads
-    stats = SEQKIT_STATS.out.stats
+    reads    = ch_reads
+    stats    = SEQKIT_STATS.out.stats
+    versions = ch_versions
 }

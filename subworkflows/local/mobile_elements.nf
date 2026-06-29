@@ -19,6 +19,7 @@ workflow MOBILE_ELEMENTS {
 
     main:
     GENOMAD_ENDTOEND(assemblies, genomad_db)
+    // GENOMAD_ENDTOEND emits versions via topic: versions (handled globally)
 
     // collect each geNomad per-sample output across samples (drop meta)
     def justfiles = { ch -> ch.map { meta, f -> f }.collect() }
@@ -35,8 +36,10 @@ workflow MOBILE_ELEMENTS {
 
     // CheckV on pooled viral sequences, then collate viruses + proviruses.
     CHECKV_ENDTOEND(GENOMAD_PROCESS.out.virus.map { f -> [ [id: 'pooled_virus'], f ] }, checkv_db)
+    // CHECKV_ENDTOEND emits versions via topic: versions (handled globally)
     ch_collate_in = CHECKV_ENDTOEND.out.viruses.join(CHECKV_ENDTOEND.out.proviruses)
     CHECKV_COLLATE(ch_collate_in)
+    // CHECKV_COLLATE has no emit: versions
 
     // Cluster virus (post-CheckV) and plasmid (geNomad) sequences separately.
     ch_cluster_in = CHECKV_COLLATE.out.fasta.map { f -> ['virus', f] }
@@ -45,4 +48,5 @@ workflow MOBILE_ELEMENTS {
 
     emit:
     clusters = CHECKV_CLUSTER.out.clusters
+    versions = GENOMAD_PROCESS.out.versions.mix(CHECKV_CLUSTER.out.versions)
 }

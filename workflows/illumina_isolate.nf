@@ -15,6 +15,7 @@ include { CHECKM1_LINEAGEWF }      from '../modules/local/checkm1'
 include { COVERM_CONTIG }          from '../modules/local/coverm'
 include { SEQKIT_STATS }           from '../modules/local/read_stats'
 include { FASTQ_GZIP_TEST }        from '../modules/local/validate'
+include { DUMP_SOFTWARE_VERSIONS } from '../modules/local/dump_software_versions'
 
 def optpath = { p -> p ? file(p, checkIfExists: true) : [] }
 
@@ -32,20 +33,26 @@ workflow ILLUMINA_ISOLATE {
     FASTQ_GZIP_TEST(INPUT_CHECK.out.reads_short)
     ch_reads = FASTQ_GZIP_TEST.out.reads
     ch_read_stats = ch_reads.map { meta, reads -> [ meta, 'raw', reads ] }
+    ch_versions = Channel.empty()
+        .mix(INPUT_CHECK.out.versions)
+        .mix(FASTQ_GZIP_TEST.out.versions)
 
     if (!params.skip_qc) {
         FASTP(ch_reads.map { meta, reads -> [ meta, reads, [] ] }, false, false, false)
         ch_qc = FASTP.out.reads
         ch_read_stats = ch_read_stats.mix(FASTP.out.reads.map { meta, reads -> [ meta, 'fastp', reads ] })
+        // FASTP emits versions via topic: versions (collected globally below)
     } else {
         ch_qc = ch_reads
     }
     SEQKIT_STATS(ch_read_stats)
+    ch_versions = ch_versions.mix(SEQKIT_STATS.out.versions)
 
     ch_assembly = Channel.empty()
     if (!params.skip_assembly) {
         SHOVILL(ch_qc)
         ch_assembly = SHOVILL.out.assembly
+        ch_versions = ch_versions.mix(SHOVILL.out.versions)
     }
 
     ch_checkm2_tsv = Channel.empty()
@@ -55,9 +62,11 @@ workflow ILLUMINA_ISOLATE {
             [ [:], file(params.checkm2_db) ]
         )
         ch_checkm2_tsv = CHECKM2_PREDICT.out.checkm2_tsv
+        // CHECKM2_PREDICT emits versions via topic: versions (collected globally below)
     }
     if (params.run_checkm1) {
         CHECKM1_LINEAGEWF(ch_assembly.map { meta, fasta -> fasta }.collect())
+        ch_versions = ch_versions.mix(CHECKM1_LINEAGEWF.out.versions)
     }
 
     GENOME_TAXONOMY_QC(
@@ -69,6 +78,7 @@ workflow ILLUMINA_ISOLATE {
         params.run_genomespot,
         params.run_barrnap
     )
+    ch_versions = ch_versions.mix(GENOME_TAXONOMY_QC.out.versions)
 
     ISOLATE_ANNOTATION(
         ch_assembly,
@@ -79,6 +89,7 @@ workflow ILLUMINA_ISOLATE {
         !params.skip_annotation,
         !params.skip_annotation
     )
+    ch_versions = ch_versions.mix(ISOLATE_ANNOTATION.out.versions)
 
     if (!params.skip_mobile_elements) {
         MOBILE_ELEMENTS(
@@ -86,6 +97,7 @@ workflow ILLUMINA_ISOLATE {
             file(params.genomad_db, checkIfExists: true),
             file(params.checkv_db,  checkIfExists: true)
         )
+        ch_versions = ch_versions.mix(MOBILE_ELEMENTS.out.versions)
     }
 
     if (!params.skip_read_mapping) {
@@ -94,6 +106,7 @@ workflow ILLUMINA_ISOLATE {
                 .join(ch_qc)
                 .map { meta, scaffolds, reads -> [ meta, reads, scaffolds ] }
         )
+        ch_versions = ch_versions.mix(COVERM_CONTIG.out.versions)
     }
 
     if (!params.skip_comparative) {
@@ -111,5 +124,13 @@ workflow ILLUMINA_ISOLATE {
             params.run_chewbbaca,
             params.run_tree
         )
+        ch_versions = ch_versions.mix(ISOLATE_COMPARATIVE.out.versions)
     }
+
+    // --- Software versions manifest ---
+    ch_nfcore_versions = channel.topic('versions')
+        .collectFile(name: 'nfcore_versions.yml', newLine: true) { process, tool, version ->
+            "\"${process}\":\n    ${tool}: ${version}"
+        }
+    DUMP_SOFTWARE_VERSIONS(ch_versions.mix(ch_nfcore_versions).collect())
 }

@@ -53,4 +53,9 @@ workflow.onComplete {
     log.info ( workflow.success
         ? "\n[gmaio] Pipeline completed successfully (mode=${params.mode}). Results in: ${params.outdir}\n"
         : "\n[gmaio] Pipeline completed with errors (mode=${params.mode}).\n" )
+    def pf = new File("${params.outdir}/pipeline_info/run_params.json")
+    pf.parentFile.mkdirs()
+    pf.text = groovy.json.JsonOutput.prettyPrint(
+        groovy.json.JsonOutput.toJson(params)
+    )
 }

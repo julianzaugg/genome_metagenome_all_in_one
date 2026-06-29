@@ -26,7 +26,8 @@ workflow GENOME_TAXONOMY_QC {
     run_dram_bins     // bool
 
     main:
-    ch_gtdbtk = Channel.empty()
+    ch_gtdbtk   = Channel.empty()
+    ch_versions = Channel.empty()
     if (run_taxonomy) {
         GTDBTK_CLASSIFYWF(
             genomes.map { g -> [ [id: 'all_genomes'], g ] },
@@ -34,6 +35,7 @@ workflow GENOME_TAXONOMY_QC {
             false
         )
         ch_gtdbtk = GTDBTK_CLASSIFYWF.out.summary
+        // GTDBTK_CLASSIFYWF emits versions via topic: versions (handled globally)
     }
 
     // Run pyrodigal once if either GenomeSPOT or DRAM-bins needs per-bin proteins
@@ -41,6 +43,7 @@ workflow GENOME_TAXONOMY_QC {
     if (run_genomespot || run_dram_bins) {
         PYRODIGAL_BINS(per_genome)
         ch_proteins = PYRODIGAL_BINS.out.faa
+        ch_versions = ch_versions.mix(PYRODIGAL_BINS.out.versions)
     }
 
     ch_genomespot = Channel.empty()
@@ -49,6 +52,8 @@ workflow GENOME_TAXONOMY_QC {
         GENOMESPOT(ch_gs_in, genomespot_models)
         ch_genomespot = GENOMESPOT.out.predictions
         GENOMESPOT_COMBINE(GENOMESPOT.out.predictions.map { _meta, tsv -> tsv }.collect())
+        ch_versions = ch_versions.mix(GENOMESPOT.out.versions)
+        ch_versions = ch_versions.mix(GENOMESPOT_COMBINE.out.versions)
     }
 
     ch_dram_annotations = Channel.empty()
@@ -58,12 +63,15 @@ workflow GENOME_TAXONOMY_QC {
         DRAM_DISTILL(DRAM_ANNOTATE_BINS.out.annotations)
         ch_dram_annotations = DRAM_ANNOTATE_BINS.out.annotations
         ch_dram_distilled   = DRAM_DISTILL.out.distilled
+        ch_versions = ch_versions.mix(DRAM_ANNOTATE_BINS.out.versions)
+        ch_versions = ch_versions.mix(DRAM_DISTILL.out.versions)
     }
 
     ch_rrna = Channel.empty()
     if (run_barrnap) {
         BARRNAP(per_genome)
         ch_rrna = BARRNAP.out.rrna
+        ch_versions = ch_versions.mix(BARRNAP.out.versions)
     }
 
     emit:
@@ -72,4 +80,5 @@ workflow GENOME_TAXONOMY_QC {
     rrna             = ch_rrna
     dram_annotations = ch_dram_annotations
     dram_distilled   = ch_dram_distilled
+    versions         = ch_versions
 }

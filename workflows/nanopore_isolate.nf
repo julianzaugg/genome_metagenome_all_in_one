@@ -17,6 +17,7 @@ include { CHECKM1_LINEAGEWF }     from '../modules/local/checkm1'
 include { COVERM_CONTIG as COVERM_CONTIG_ONT; COVERM_CONTIG as COVERM_CONTIG_SR } from '../modules/local/coverm'
 include { SEQKIT_STATS }          from '../modules/local/read_stats'
 include { FASTQ_GZIP_TEST }       from '../modules/local/validate'
+include { DUMP_SOFTWARE_VERSIONS } from '../modules/local/dump_software_versions'
 
 def optpath = { p -> p ? file(p, checkIfExists: true) : [] }
 
@@ -45,20 +46,26 @@ workflow NANOPORE_ISOLATE {
         !params.skip_qc
     )
     ch_long = LONG_READ_QC.out.reads
+    ch_versions = Channel.empty()
+        .mix(INPUT_CHECK.out.versions)
+        .mix(LONG_READ_QC.out.versions)
 
     ch_short = Channel.empty()
     if (!params.skip_qc) {
         FASTP(INPUT_CHECK.out.reads_short.map { meta, reads -> [ meta, reads, [] ] }, false, false, false)
         ch_short = FASTP.out.reads
+        // FASTP emits versions via topic: versions (collected globally below)
     } else {
         FASTQ_GZIP_TEST(INPUT_CHECK.out.reads_short)
         ch_short = FASTQ_GZIP_TEST.out.reads
+        ch_versions = ch_versions.mix(FASTQ_GZIP_TEST.out.versions)
     }
 
     ch_assembly = Channel.empty()
     if (!params.skip_assembly) {
         AUTOCYCLER_ASSEMBLE(ch_long, params.long_read_type)
         ch_assembly = AUTOCYCLER_ASSEMBLE.out.assembly
+        ch_versions = ch_versions.mix(AUTOCYCLER_ASSEMBLE.out.versions)
 
         if (!params.skip_dorado_polish) {
             DORADO_POLISH(
@@ -66,6 +73,7 @@ workflow NANOPORE_ISOLATE {
                 params.dorado_device
             )
             ch_assembly = DORADO_POLISH.out.assembly
+            ch_versions = ch_versions.mix(DORADO_POLISH.out.versions)
         }
 
         if (!params.skip_polypolish) {
@@ -75,10 +83,12 @@ workflow NANOPORE_ISOLATE {
             POLYPOLISH(ch_hybrid_polish_in)
             ch_no_short = ch_assembly.filter { meta, assembly -> !meta.has_short_reads }
             ch_assembly = ch_no_short.mix(POLYPOLISH.out.assembly)
+            ch_versions = ch_versions.mix(POLYPOLISH.out.versions)
         }
 
         DNAAPLER(ch_assembly)
         ch_assembly = DNAAPLER.out.assembly
+        ch_versions = ch_versions.mix(DNAAPLER.out.versions)
     }
 
     if (!params.skip_checkm) {
@@ -86,9 +96,11 @@ workflow NANOPORE_ISOLATE {
             ch_assembly.map { meta, fasta -> [ meta, fasta ] },
             [ [:], file(params.checkm2_db) ]
         )
+        // CHECKM2_PREDICT emits versions via topic: versions (collected globally below)
     }
     if (params.run_checkm1) {
         CHECKM1_LINEAGEWF(ch_assembly.map { meta, fasta -> fasta }.collect())
+        ch_versions = ch_versions.mix(CHECKM1_LINEAGEWF.out.versions)
     }
 
     GENOME_TAXONOMY_QC(
@@ -100,6 +112,7 @@ workflow NANOPORE_ISOLATE {
         params.run_genomespot,
         params.run_barrnap
     )
+    ch_versions = ch_versions.mix(GENOME_TAXONOMY_QC.out.versions)
 
     ISOLATE_ANNOTATION(
         ch_assembly,
@@ -110,6 +123,7 @@ workflow NANOPORE_ISOLATE {
         !params.skip_annotation,
         !params.skip_annotation
     )
+    ch_versions = ch_versions.mix(ISOLATE_ANNOTATION.out.versions)
 
     if (!params.skip_mobile_elements) {
         MOBILE_ELEMENTS(
@@ -117,6 +131,7 @@ workflow NANOPORE_ISOLATE {
             file(params.genomad_db, checkIfExists: true),
             file(params.checkv_db,  checkIfExists: true)
         )
+        ch_versions = ch_versions.mix(MOBILE_ELEMENTS.out.versions)
     }
 
     if (!params.skip_read_mapping) {
@@ -130,6 +145,9 @@ workflow NANOPORE_ISOLATE {
                 .join(ch_short)
                 .map { meta, scaffolds, reads -> [ meta, reads, scaffolds ] }
         )
+        ch_versions = ch_versions
+            .mix(COVERM_CONTIG_ONT.out.versions)
+            .mix(COVERM_CONTIG_SR.out.versions)
     }
 
     if (!params.skip_comparative) {
@@ -147,5 +165,13 @@ workflow NANOPORE_ISOLATE {
             params.run_chewbbaca,
             params.run_tree
         )
+        ch_versions = ch_versions.mix(ISOLATE_COMPARATIVE.out.versions)
     }
+
+    // --- Software versions manifest ---
+    ch_nfcore_versions = channel.topic('versions')
+        .collectFile(name: 'nfcore_versions.yml', newLine: true) { process, tool, version ->
+            "\"${process}\":\n    ${tool}: ${version}"
+        }
+    DUMP_SOFTWARE_VERSIONS(ch_versions.mix(ch_nfcore_versions).collect())
 }

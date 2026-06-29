@@ -16,5 +16,6 @@ workflow HOST_REMOVAL {
     CLEANIFIER(reads, cleanifier_index)
 
     emit:
-    reads = CLEANIFIER.out.reads
+    reads    = CLEANIFIER.out.reads
+    versions = CLEANIFIER.out.versions
 }

@@ -47,6 +47,7 @@ workflow INPUT_CHECK {
     mode          // val: the --mode string
 
     main:
+    ch_versions = Channel.empty()
     ch_rows = Channel.fromPath(samplesheet, checkIfExists: true)
         .splitCsv(header: true, strip: true)
         .map { row -> [ build_meta(row, mode), row ] }
@@ -76,4 +77,5 @@ workflow INPUT_CHECK {
     pod5
     host
     meta
+    versions = ch_versions
 }

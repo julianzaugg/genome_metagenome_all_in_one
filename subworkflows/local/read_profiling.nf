@@ -23,17 +23,21 @@ workflow READ_PROFILING {
     ch_sylph_seq     = Channel.empty()
     ch_singlem       = Channel.empty()
     ch_read_sets     = reads.collect(flat: false)
+    ch_versions      = Channel.empty()
 
     if (run_sylph) {
         SYLPH_SKETCH(reads)
         ch_sketches = SYLPH_SKETCH.out.sketch.map { meta, s -> s }.collect()
         SYLPH_PROFILE(ch_sketches, sylph_db)
         ch_sylph_profile = SYLPH_PROFILE.out.profile
+        ch_versions = ch_versions.mix(SYLPH_SKETCH.out.versions)
+        ch_versions = ch_versions.mix(SYLPH_PROFILE.out.versions)
 
         if (run_sylph_tax) {
             SYLPH_TAX(SYLPH_PROFILE.out.profile, sylph_tax_metadata)
             ch_sylph_rel = SYLPH_TAX.out.relative
             ch_sylph_seq = SYLPH_TAX.out.sequence
+            ch_versions = ch_versions.mix(SYLPH_TAX.out.versions)
         }
     }
 
@@ -50,6 +54,7 @@ workflow READ_PROFILING {
         }
         SINGLEM_PIPE(ch_singlem_forward, ch_singlem_reverse, singlem_metapackage)
         ch_singlem = SINGLEM_PIPE.out.profile
+        ch_versions = ch_versions.mix(SINGLEM_PIPE.out.versions)
     }
 
     emit:
@@ -57,4 +62,5 @@ workflow READ_PROFILING {
     sylph_relative     = ch_sylph_rel
     sylph_sequence     = ch_sylph_seq
     singlem            = ch_singlem
+    versions           = ch_versions
 }

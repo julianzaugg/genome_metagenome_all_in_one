@@ -24,13 +24,14 @@ workflow ISOLATE_ANNOTATION {
     run_isescan              // bool
 
     main:
-    ch_gff = Channel.empty()
-    ch_faa = Channel.empty()
-    ch_json = Channel.empty()
-    ch_stats = Channel.empty()
-    ch_mlst = Channel.empty()
-    ch_amr = Channel.empty()
+    ch_gff     = Channel.empty()
+    ch_faa     = Channel.empty()
+    ch_json    = Channel.empty()
+    ch_stats   = Channel.empty()
+    ch_mlst    = Channel.empty()
+    ch_amr     = Channel.empty()
     ch_isescan = Channel.empty()
+    ch_versions = Channel.empty()
 
     if (run_annotation) {
         BAKTA_BAKTA(assemblies, bakta_db, bakta_reference_proteins)
@@ -39,15 +40,22 @@ workflow ISOLATE_ANNOTATION {
         ch_json = BAKTA_BAKTA.out.json
         BAKTA_STATS(ch_json.map { meta, json -> json }.collect())
         ch_stats = BAKTA_STATS.out.stats
+        ch_versions = ch_versions
+            .mix(BAKTA_BAKTA.out.versions)
+            .mix(BAKTA_STATS.out.versions)
 
         MLST(assemblies.map { meta, fasta -> fasta }.collect())
         ch_mlst = MLST.out.summary
+        ch_versions = ch_versions.mix(MLST.out.versions)
 
         if (run_amrfinder) {
             ch_amr_in = ch_faa.join(ch_gff)
             AMRFINDERPLUS_RUN(ch_amr_in, amrfinder_db)
             AMRFINDERPLUS_COLLATE(AMRFINDERPLUS_RUN.out.results.map { meta, t -> t }.collect())
             ch_amr = AMRFINDERPLUS_COLLATE.out.summary
+            ch_versions = ch_versions
+                .mix(AMRFINDERPLUS_RUN.out.versions)
+                .mix(AMRFINDERPLUS_COLLATE.out.versions)
         }
     }
 
@@ -55,6 +63,9 @@ workflow ISOLATE_ANNOTATION {
         ISESCAN(assemblies)
         ISESCAN_COLLATE(ISESCAN.out.tables.map { meta, t -> t }.collect())
         ch_isescan = ISESCAN_COLLATE.out.summary
+        ch_versions = ch_versions
+            .mix(ISESCAN.out.versions)
+            .mix(ISESCAN_COLLATE.out.versions)
     }
 
     emit:
@@ -65,4 +76,5 @@ workflow ISOLATE_ANNOTATION {
     mlst      = ch_mlst
     amrfinder = ch_amr
     isescan   = ch_isescan
+    versions  = ch_versions
 }

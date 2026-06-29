@@ -19,6 +19,7 @@ include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
 include { CLEANIFIER_INDEX }            from '../modules/local/host_removal'
+include { DUMP_SOFTWARE_VERSIONS }      from '../modules/local/dump_software_versions'
 
 def optpath = { p -> p ? file(p, checkIfExists: true) : [] }
 
@@ -44,6 +45,9 @@ workflow NANOPORE_METAGENOME {
         !params.skip_qc
     )
     ch_reads = LONG_READ_QC.out.reads
+    ch_versions = Channel.empty()
+        .mix(INPUT_CHECK.out.versions)
+        .mix(LONG_READ_QC.out.versions)
 
     ch_sylph_tax_meta = params.sylph_tax_metadata
         ? Channel.fromPath(params.sylph_tax_metadata, checkIfExists: true).collect()
@@ -57,6 +61,7 @@ workflow NANOPORE_METAGENOME {
         !params.skip_sylph && params.sylph_tax_metadata != null,
         !params.skip_singlem
     )
+    ch_versions = ch_versions.mix(READ_PROFILING.out.versions)
 
     if (!params.skip_host_removal) {
         if (params.cleanifier_db) {
@@ -67,9 +72,11 @@ workflow NANOPORE_METAGENOME {
             }
             CLEANIFIER_INDEX(file(params.host_ref, checkIfExists: true), params.cleanifier_nobjects ?: '')
             ch_cleanifier_index = CLEANIFIER_INDEX.out.index
+            ch_versions = ch_versions.mix(CLEANIFIER_INDEX.out.versions)
         }
         HOST_REMOVAL(ch_reads, ch_cleanifier_index)
         ch_clean = HOST_REMOVAL.out.reads
+        ch_versions = ch_versions.mix(HOST_REMOVAL.out.versions)
     } else {
         ch_clean = ch_reads
     }
@@ -78,6 +85,7 @@ workflow NANOPORE_METAGENOME {
     if (!params.skip_assembly) {
         MYLOASM(ch_clean)
         ch_assembly = MYLOASM.out.assembly
+        ch_versions = ch_versions.mix(MYLOASM.out.versions)
 
         if (!params.skip_dorado_polish) {
             DORADO_POLISH(
@@ -85,6 +93,7 @@ workflow NANOPORE_METAGENOME {
                 params.dorado_device
             )
             ch_assembly = DORADO_POLISH.out.assembly
+            ch_versions = ch_versions.mix(DORADO_POLISH.out.versions)
         }
     }
 
@@ -94,6 +103,7 @@ workflow NANOPORE_METAGENOME {
                 .join(ch_clean)
                 .map { meta, scaffolds, reads -> [ meta, reads, scaffolds ] }
         )
+        ch_versions = ch_versions.mix(COVERM_CONTIG_ONT.out.versions)
     }
 
     if (!params.skip_binning) {
@@ -105,6 +115,9 @@ workflow NANOPORE_METAGENOME {
         )
         AVIARY_COLLECT_BINS(AVIARY_RECOVER.out.bins.map { meta, bins -> bins }.flatten().collect())
         ch_all_bins = AVIARY_COLLECT_BINS.out.bins
+        ch_versions = ch_versions
+            .mix(AVIARY_RECOVER.out.versions)
+            .mix(AVIARY_COLLECT_BINS.out.versions)
 
         ch_checkm2_tsv = Channel.value([])
         ch_checkm1_tsv = Channel.value([])
@@ -114,10 +127,12 @@ workflow NANOPORE_METAGENOME {
                 [ [:], file(params.checkm2_db) ]
             )
             ch_checkm2_tsv = CHECKM2_PREDICT.out.checkm2_tsv.map { m, t -> t }
+            // CHECKM2_PREDICT emits versions via topic: versions (collected globally below)
         }
         if (params.run_checkm1) {
             CHECKM1_LINEAGEWF(ch_all_bins)
             ch_checkm1_tsv = CHECKM1_LINEAGEWF.out.summary
+            ch_versions = ch_versions.mix(CHECKM1_LINEAGEWF.out.versions)
         }
 
         if (!params.skip_dereplication) {
@@ -125,6 +140,7 @@ workflow NANOPORE_METAGENOME {
             ch_reps      = COVERM_CLUSTER.out.representatives.collect()
             ch_per_rep   = COVERM_CLUSTER.out.representatives.flatten()
                                 .map { f -> [ [id: f.baseName], f ] }
+            ch_versions = ch_versions.mix(COVERM_CLUSTER.out.versions)
         } else {
             ch_reps    = ch_all_bins
             ch_per_rep = AVIARY_COLLECT_BINS.out.bins.flatten().map { b -> [ [id: b.baseName], b ] }
@@ -132,6 +148,7 @@ workflow NANOPORE_METAGENOME {
 
         if (!params.skip_read_mapping) {
             COVERM_GENOME_ONT(ch_clean, ch_reps)
+            ch_versions = ch_versions.mix(COVERM_GENOME_ONT.out.versions)
         }
 
         GENOME_TAXONOMY_QC(
@@ -145,6 +162,7 @@ workflow NANOPORE_METAGENOME {
             params.run_barrnap,
             params.run_dram_bins
         )
+        ch_versions = ch_versions.mix(GENOME_TAXONOMY_QC.out.versions)
     }
 
     if (!params.skip_gene_catalogue) {
@@ -156,6 +174,9 @@ workflow NANOPORE_METAGENOME {
             optpath(params.dram_db),
             !params.skip_annotation
         )
+        ch_versions = ch_versions
+            .mix(PYRODIGAL_SCAFFOLDS.out.versions)
+            .mix(GENE_CATALOGUE.out.versions)
     }
 
     if (!params.skip_mobile_elements) {
@@ -164,9 +185,18 @@ workflow NANOPORE_METAGENOME {
             file(params.genomad_db, checkIfExists: true),
             file(params.checkv_db,  checkIfExists: true)
         )
+        ch_versions = ch_versions.mix(MOBILE_ELEMENTS.out.versions)
     }
 
     if (params.run_nonpareil) {
         NONPAREIL(ch_clean)
+        ch_versions = ch_versions.mix(NONPAREIL.out.versions)
     }
+
+    // --- Software versions manifest ---
+    ch_nfcore_versions = channel.topic('versions')
+        .collectFile(name: 'nfcore_versions.yml', newLine: true) { process, tool, version ->
+            "\"${process}\":\n    ${tool}: ${version}"
+        }
+    DUMP_SOFTWARE_VERSIONS(ch_versions.mix(ch_nfcore_versions).collect())
 }

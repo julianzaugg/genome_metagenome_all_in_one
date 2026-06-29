@@ -31,9 +31,15 @@ workflow GENE_CATALOGUE {
     CATALOGUE_TABULATE(CDHIT.out.clusters)
 
     ch_annotations = Channel.empty()
+    ch_versions = Channel.empty()
+        .mix(CATALOGUE_PREP.out.versions)
+        .mix(CDHIT.out.versions)
+        .mix(CATALOGUE_CDS.out.versions)
+        .mix(CATALOGUE_TABULATE.out.versions)
     if (run_annotation) {
         DRAM_ANNOTATE(CDHIT.out.catalogue, dram_db)
         ch_annotations = DRAM_ANNOTATE.out.annotations
+        ch_versions = ch_versions.mix(DRAM_ANNOTATE.out.versions)
     }
 
     emit:
@@ -42,4 +48,5 @@ workflow GENE_CATALOGUE {
     cds         = CATALOGUE_CDS.out.cds
     membership  = CATALOGUE_TABULATE.out.membership
     annotations = ch_annotations
+    versions    = ch_versions
 }

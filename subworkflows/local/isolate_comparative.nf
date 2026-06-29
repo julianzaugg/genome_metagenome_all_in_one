@@ -41,16 +41,18 @@ workflow ISOLATE_COMPARATIVE {
         .flatten()
         .map { group_dir -> [ [ id: group_dir.baseName ], group_dir ] }
 
-    ch_fastani = Channel.empty()
-    ch_parsnp = Channel.empty()
-    ch_gubbins = Channel.empty()
-    ch_panaroo = Channel.empty()
+    ch_fastani   = Channel.empty()
+    ch_parsnp    = Channel.empty()
+    ch_gubbins   = Channel.empty()
+    ch_panaroo   = Channel.empty()
     ch_chewbacca = Channel.empty()
-    ch_tree = Channel.empty()
+    ch_tree      = Channel.empty()
+    ch_versions  = PREP_COMPARISON_GROUPS.out.versions
 
     if (run_fastani) {
         FASTANI(ch_groups)
         ch_fastani = FASTANI.out.results
+        ch_versions = ch_versions.mix(FASTANI.out.versions)
     }
 
     if (run_parsnp) {
@@ -58,20 +60,25 @@ workflow ISOLATE_COMPARATIVE {
         ch_parsnp = PARSNP.out.alignment
         GUBBINS(PARSNP.out.alignment)
         ch_gubbins = GUBBINS.out.polymorphic_sites
+        ch_versions = ch_versions.mix(PARSNP.out.versions)
+        ch_versions = ch_versions.mix(GUBBINS.out.versions)
     }
 
     if (run_panaroo) {
         PANAROO_RUN(ch_groups)
         ch_panaroo = PANAROO_RUN.out.core_alignment
+        ch_versions = ch_versions.mix(PANAROO_RUN.out.versions)
         if (run_tree) {
             IQTREE(PANAROO_RUN.out.core_alignment)
             ch_tree = IQTREE.out.tree
+            ch_versions = ch_versions.mix(IQTREE.out.versions)
         }
     }
 
     if (run_chewbbaca) {
         CHEWBACCA_RUN(ch_groups, chewbbaca_training_file, chewbbaca_cgmlst_thresholds)
         ch_chewbacca = CHEWBACCA_RUN.out.outdir
+        ch_versions = ch_versions.mix(CHEWBACCA_RUN.out.versions)
     }
 
     emit:
@@ -82,4 +89,5 @@ workflow ISOLATE_COMPARATIVE {
     panaroo   = ch_panaroo
     chewbacca = ch_chewbacca
     tree      = ch_tree
+    versions  = ch_versions
 }

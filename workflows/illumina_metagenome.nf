@@ -35,6 +35,7 @@ include { NONPAREIL }                   from '../modules/local/nonpareil'
 include { SEQKIT_STATS }                from '../modules/local/read_stats'
 include { CLEANIFIER_INDEX }            from '../modules/local/host_removal'
 include { FASTQ_GZIP_TEST }             from '../modules/local/validate'
+include { DUMP_SOFTWARE_VERSIONS }      from '../modules/local/dump_software_versions'
 
 // resolve a possibly-null db param to a path or an empty list (for optional inputs)
 def optpath = { p -> p ? file(p, checkIfExists: true) : [] }
@@ -53,12 +54,16 @@ workflow ILLUMINA_METAGENOME {
     FASTQ_GZIP_TEST(INPUT_CHECK.out.reads_short)
     ch_reads = FASTQ_GZIP_TEST.out.reads
     ch_read_stats = ch_reads.map { meta, reads -> [ meta, 'raw', reads ] }
+    ch_versions = Channel.empty()
+        .mix(INPUT_CHECK.out.versions)
+        .mix(FASTQ_GZIP_TEST.out.versions)
 
     // --- QC ---
     if (!params.skip_qc) {
         FASTP(ch_reads.map { meta, reads -> [ meta, reads, [] ] }, false, false, false)
         ch_qc = FASTP.out.reads
         ch_read_stats = ch_read_stats.mix(FASTP.out.reads.map { meta, reads -> [ meta, 'fastp', reads ] })
+        // FASTP emits versions via topic: versions (collected globally below)
     } else {
         ch_qc = ch_reads
     }
@@ -76,6 +81,7 @@ workflow ILLUMINA_METAGENOME {
         !params.skip_sylph && params.sylph_tax_metadata != null,
         !params.skip_singlem
     )
+    ch_versions = ch_versions.mix(READ_PROFILING.out.versions)
 
     // --- Host removal ---
     if (!params.skip_host_removal) {
@@ -87,15 +93,18 @@ workflow ILLUMINA_METAGENOME {
             }
             CLEANIFIER_INDEX(file(params.host_ref, checkIfExists: true), params.cleanifier_nobjects ?: '')
             ch_cleanifier_index = CLEANIFIER_INDEX.out.index
+            ch_versions = ch_versions.mix(CLEANIFIER_INDEX.out.versions)
         }
         HOST_REMOVAL(ch_qc, ch_cleanifier_index)
         ch_clean = HOST_REMOVAL.out.reads
         ch_read_stats = ch_read_stats.mix(HOST_REMOVAL.out.reads.map { meta, reads -> [ meta, 'cleanifier', reads ] })
+        ch_versions = ch_versions.mix(HOST_REMOVAL.out.versions)
     } else {
         ch_clean = ch_qc
     }
 
     SEQKIT_STATS(ch_read_stats)
+    ch_versions = ch_versions.mix(SEQKIT_STATS.out.versions)
 
     // --- Assembly (metaSPAdes) ---
     ch_assembly = Channel.empty()
@@ -103,6 +112,7 @@ workflow ILLUMINA_METAGENOME {
         SPADES(ch_clean.map { meta, reads -> [ meta, reads, [], [] ] }, [], [])
         PREP_ASSEMBLY(SPADES.out.scaffolds)
         ch_assembly = PREP_ASSEMBLY.out.assembly    // [ meta, scaffolds.fasta ]
+        // SPADES emits versions via topic: versions (collected globally below)
     }
 
     // --- Map QC'd reads to each sample's assembled scaffolds ---
@@ -112,6 +122,7 @@ workflow ILLUMINA_METAGENOME {
                 .join(ch_clean)
                 .map { meta, scaffolds, reads -> [ meta, reads, scaffolds ] }
         )
+        ch_versions = ch_versions.mix(COVERM_CONTIG.out.versions)
     }
 
     // --- Binning (Aviary) ---
@@ -127,6 +138,9 @@ workflow ILLUMINA_METAGENOME {
         // CheckM, dereplication, read mapping, and downstream taxonomy/QC.
         AVIARY_COLLECT_BINS(AVIARY_RECOVER.out.bins.map { meta, bins -> bins }.flatten().collect())
         ch_all_bins = AVIARY_COLLECT_BINS.out.bins
+        ch_versions = ch_versions
+            .mix(AVIARY_RECOVER.out.versions)
+            .mix(AVIARY_COLLECT_BINS.out.versions)
 
         // CheckM on ALL bins (pre-dereplication). CheckM2 drives clustering; both
         // CheckM1 and CheckM2 feed the high-quality-representative selection.
@@ -138,10 +152,12 @@ workflow ILLUMINA_METAGENOME {
                 [ [:], file(params.checkm2_db) ]
             )
             ch_checkm2_tsv = CHECKM2_PREDICT.out.checkm2_tsv.map { m, t -> t }
+            // CHECKM2_PREDICT emits versions via topic: versions (collected globally below)
         }
         if (params.run_checkm1) {
             CHECKM1_LINEAGEWF(ch_all_bins)
             ch_checkm1_tsv = CHECKM1_LINEAGEWF.out.summary
+            ch_versions = ch_versions.mix(CHECKM1_LINEAGEWF.out.versions)
         }
 
         // --- Dereplication ---
@@ -150,6 +166,7 @@ workflow ILLUMINA_METAGENOME {
             ch_reps      = COVERM_CLUSTER.out.representatives.collect()
             ch_per_rep   = COVERM_CLUSTER.out.representatives.flatten()
                                 .map { f -> [ [id: f.baseName], f ] }
+            ch_versions = ch_versions.mix(COVERM_CLUSTER.out.versions)
         } else {
             ch_reps    = ch_all_bins
             ch_per_rep = AVIARY_COLLECT_BINS.out.bins.flatten().map { b -> [ [id: b.baseName], b ] }
@@ -158,6 +175,7 @@ workflow ILLUMINA_METAGENOME {
         // --- Map QC'd reads to representatives ---
         if (!params.skip_read_mapping) {
             COVERM_GENOME(ch_clean, ch_reps)
+            ch_versions = ch_versions.mix(COVERM_GENOME.out.versions)
         }
 
         // --- Taxonomy + per-genome QC on representatives ---
@@ -172,6 +190,7 @@ workflow ILLUMINA_METAGENOME {
             params.run_barrnap,
             params.run_dram_bins
         )
+        ch_versions = ch_versions.mix(GENOME_TAXONOMY_QC.out.versions)
     }
 
     // --- Gene catalogue (from scaffold proteins) ---
@@ -184,6 +203,9 @@ workflow ILLUMINA_METAGENOME {
             optpath(params.dram_db),
             !params.skip_annotation
         )
+        ch_versions = ch_versions
+            .mix(PYRODIGAL_SCAFFOLDS.out.versions)
+            .mix(GENE_CATALOGUE.out.versions)
     }
 
     // --- RPKM (selected stream only: host-filtered fastp reads, or fastp reads if host removal is skipped) ---
@@ -197,6 +219,7 @@ workflow ILLUMINA_METAGENOME {
             optpath(params.rpkm_singlem_marker_lengths),
             params.rpkm_min_read_length
         )
+        ch_versions = ch_versions.mix(RPKM.out.versions)
     }
 
     // --- Mobile elements (virus/plasmid) ---
@@ -206,10 +229,20 @@ workflow ILLUMINA_METAGENOME {
             file(params.genomad_db, checkIfExists: true),
             file(params.checkv_db,  checkIfExists: true)
         )
+        ch_versions = ch_versions.mix(MOBILE_ELEMENTS.out.versions)
     }
 
     // --- Sequencing coverage assessment ---
     if (params.run_nonpareil) {
         NONPAREIL(ch_clean)
+        ch_versions = ch_versions.mix(NONPAREIL.out.versions)
     }
+
+    // --- Software versions manifest ---
+    // nf-core modules emit tuples via topic: versions; convert to file and merge with local versions
+    ch_nfcore_versions = channel.topic('versions')
+        .collectFile(name: 'nfcore_versions.yml', newLine: true) { process, tool, version ->
+            "\"${process}\":\n    ${tool}: ${version}"
+        }
+    DUMP_SOFTWARE_VERSIONS(ch_versions.mix(ch_nfcore_versions).collect())
 }

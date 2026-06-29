@@ -27,7 +27,10 @@ process SEQKIT_STATS {
 
     stub:
     """
-    echo -e "file\\tformat\\ttype\\tnum_seqs\\tsum_len\\tmin_len\\tavg_len\\tmax_len" > ${meta.id}.${stage}.seqkit_stats.tsv
+    printf "file\tformat\ttype\tnum_seqs\tsum_len\tmin_len\tavg_len\tmax_len\tQ1\tQ2\tQ3\tN50\tQ20(%%)\tQ30(%%)\tGC(%%)\n" \
+        > ${meta.id}.${stage}.seqkit_stats.tsv
+    printf "reads.fastq.gz\tFASTQ\tDNA\t1000000\t150000000\t50\t150.0\t151\t150\t150\t151\t150\t95.0\t90.0\t50.0\n" \
+        >> ${meta.id}.${stage}.seqkit_stats.tsv
     echo '"${task.process}": {seqkit: stub}' > versions.yml
     """
 }
