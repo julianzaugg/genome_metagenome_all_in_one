@@ -9,7 +9,7 @@
 
 include { GTDBTK_CLASSIFYWF }            from '../../modules/nf-core/gtdbtk/classifywf/main'
 include { PYRODIGAL as PYRODIGAL_BINS }  from '../../modules/local/pyrodigal'
-include { GENOMESPOT }                   from '../../modules/local/genomespot'
+include { GENOMESPOT; GENOMESPOT_COMBINE } from '../../modules/local/genomespot'
 include { BARRNAP }                      from '../../modules/local/barrnap'
 
 workflow GENOME_TAXONOMY_QC {
@@ -39,6 +39,7 @@ workflow GENOME_TAXONOMY_QC {
         ch_gs_in = per_genome.join(PYRODIGAL_BINS.out.faa)   // [meta, fasta, faa]
         GENOMESPOT(ch_gs_in, genomespot_models)
         ch_genomespot = GENOMESPOT.out.predictions
+        GENOMESPOT_COMBINE(GENOMESPOT.out.predictions.map { _meta, tsv -> tsv }.collect())
     }
 
     ch_rrna = Channel.empty()
