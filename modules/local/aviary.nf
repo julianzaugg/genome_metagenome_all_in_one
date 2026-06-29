@@ -90,27 +90,12 @@ EOF
         bin_file_basename="\${bin_file_basename%.fasta}"
         bin_file_basename="\${bin_file_basename%.fna}"
         bin_file_basename="\${bin_file_basename%.fa}"
-        bin_file_basename="\${bin_file_basename%.tsv}"
+        # Replace .tsv_ separator (new aviary naming) with .
+        bin_file_basename="\${bin_file_basename/.tsv_/.}"
+        # Strip generic .binned_contigs suffix (method name alone is unique for single-bin methods)
+        bin_file_basename="\${bin_file_basename%.binned_contigs}"
 
-        binner=\$(echo "\$bin_file_basename" | awk -F "." '{print \$1}' | sed 's/_bins\$//')
-        bin_number=\$(echo "\$bin_file_basename" | awk -F "." '{print \$2}')
-
-        if [[ "\$bin_file_basename" == *"rosella_dastool_refined"* ]]; then
-            bin_number="\${bin_file_basename#*refined_}"
-            binner="rosella_dastool_refined"
-        fi
-        if [[ "\$bin_file_basename" == *"single_contig_dastool_refined"* ]]; then
-            bin_number="\${bin_file_basename#*refined_}"
-            binner="single_contig_dastool_refined"
-        fi
-
-        if [[ -n "\$bin_number" ]]; then
-            bin_out_name="\${binner}.\${bin_number}"
-        else
-            bin_out_name="\${binner}"
-        fi
-
-        cp -L "\$bin_file" "${meta.id}/renamed_bins/${meta.id}.\${bin_out_name}.fasta"
+        cp -L "\$bin_file" "${meta.id}/renamed_bins/${meta.id}.\${bin_file_basename}.fasta"
     done
 
     : > ${meta.id}/renamed_bins/bin_contig_list.tsv
