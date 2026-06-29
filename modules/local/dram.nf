@@ -33,7 +33,7 @@ process DRAM_ANNOTATE {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        dram: \$(DRAM.py --version 2>&1 | sed 's/DRAM version: //')
+        dram: \$(pip show dram 2>/dev/null | grep '^Version:' | sed 's/Version: //' || echo NA)
     END_VERSIONS
     """
 
@@ -79,7 +79,7 @@ process DRAM_ANNOTATE_BINS {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        dram: \$(DRAM.py --version 2>&1 | sed 's/DRAM version: //')
+        dram: \$(pip show dram 2>/dev/null | grep '^Version:' | sed 's/Version: //' || echo NA)
     END_VERSIONS
     """
 
@@ -111,7 +111,7 @@ process DRAM_DISTILL {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        dram: \$(DRAM.py --version 2>&1 | sed 's/DRAM version: //')
+        dram: \$(pip show dram 2>/dev/null | grep '^Version:' | sed 's/Version: //' || echo NA)
     END_VERSIONS
     """
 

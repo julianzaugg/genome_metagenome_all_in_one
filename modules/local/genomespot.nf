@@ -29,7 +29,7 @@ process GENOMESPOT_COMBINE {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        genomespot: \$(python -m genome_spot.genome_spot --version 2>&1 | tail -1 || echo NA)
+        genomespot: \$(pip show genome-spot 2>/dev/null | grep '^Version:' | sed 's/Version: //' || echo NA)
     END_VERSIONS
     """
 
@@ -63,7 +63,7 @@ process GENOMESPOT {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        genomespot: \$(python -m genome_spot.genome_spot --version 2>&1 | tail -1 || echo NA)
+        genomespot: \$(pip show genome-spot 2>/dev/null | grep '^Version:' | sed 's/Version: //' || echo NA)
     END_VERSIONS
     """
 

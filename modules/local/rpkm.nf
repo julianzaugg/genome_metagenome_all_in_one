@@ -161,7 +161,7 @@ process RPKM_DIAMOND_MAKEDB {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        diamond: \$(diamond version 2>&1 | head -1)
+        diamond: \$(diamond version 2>&1 | head -1 | sed 's/^diamond version //')
     END_VERSIONS
     """
 
@@ -200,7 +200,7 @@ process RPKM_DIAMOND_GENE {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        diamond: \$(diamond version 2>&1 | head -1)
+        diamond: \$(diamond version 2>&1 | head -1 | sed 's/^diamond version //')
     END_VERSIONS
     """
 
@@ -294,7 +294,7 @@ process RPKM_DIAMOND_SINGLEM {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        diamond: \$(diamond version 2>&1 | head -1)
+        diamond: \$(diamond version 2>&1 | head -1 | sed 's/^diamond version //')
     END_VERSIONS
     """
 

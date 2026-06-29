@@ -10,6 +10,9 @@ Handles both YAML formats used in this pipeline:
 import re
 import sys
 
+_BAD_VERSION = re.compile(r'error|unrecognized|usage:|not found', re.IGNORECASE)
+_SKIP_TOOLS = {'bash', 'gzip'}
+
 
 def parse(text):
     entries = []
@@ -28,6 +31,20 @@ def parse(text):
     return entries
 
 
+def normalise(version):
+    return re.sub(r'^v(\d)', r'\1', version)
+
+
+def is_valid(tool, version):
+    if tool.lower() in _SKIP_TOOLS:
+        return False
+    if version.lower() in ('true', 'false', 'stub', 'na', ''):
+        return False
+    if _BAD_VERSION.search(version):
+        return False
+    return True
+
+
 def main():
     seen = set()
     rows = []
@@ -37,6 +54,9 @@ def main():
         except (FileNotFoundError, OSError):
             continue
         for proc, tool, version in parse(text):
+            version = normalise(version)
+            if not is_valid(tool, version):
+                continue
             key = (tool.lower(), version)
             if key not in seen:
                 seen.add(key)
