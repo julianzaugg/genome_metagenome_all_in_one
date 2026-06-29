@@ -26,9 +26,10 @@ process AVIARY_RECOVER {
     path 'versions.yml',                                                  emit: versions
 
     script:
-    def args   = task.ext.args ?: '--skip-singlem'
-    def long_read_type = task.ext.long_read_type ?: 'ont'
-    def reads_arg = meta.single_end ? "--longreads ${reads} --long-read-type ${long_read_type}" : "-1 ${reads[0]} -2 ${reads[1]}"
+    def args             = task.ext.args ?: '--skip-singlem'
+    def long_read_type   = task.ext.long_read_type ?: 'ont'
+    def reads_arg        = meta.single_end ? "--longreads ${reads} --long-read-type ${long_read_type}" : "-1 ${reads[0]} -2 ${reads[1]}"
+    def extra_binners    = params.aviary_extra_binners ? "--extra-binners ${params.aviary_extra_binners}" : ''
     def aviary_container_hint = params.aviary_container ?: "${params.container_base}/aviary_0.13.0.sif"
     """
     if ! command -v pixi >/dev/null 2>&1; then
@@ -71,7 +72,7 @@ EOF
     # Redirect pixi's repodata cache off NFS (Bunya home dirs) onto local /tmp
     export PIXI_CACHE_DIR=\${PIXI_CACHE_DIR:-/tmp/pixi-cache-\${USER:-runner}}
 
-    aviary recover ${args} \\
+    aviary recover ${args} ${extra_binners} \\
         --assembly ${assembly} \\
         ${reads_arg} \\
         --output ${meta.id} \\
