@@ -47,8 +47,8 @@ EOF
 
     # Nextflow runs via 'apptainer exec' which bypasses ENTRYPOINT.
     # aviary lives in the pixi default env; add it to PATH explicitly.
-    export PATH="/aviary/aviary/.pixi/envs/default/bin:\${PATH}"
-    export CONDA_PREFIX="/aviary/aviary/.pixi/envs/default"
+    export PATH="/aviary/.pixi/envs/default/bin:\${PATH}"
+    export CONDA_PREFIX="/aviary/.pixi/envs/default"
 
     export GTDBTK_DATA_PATH=${gtdb_db}
     export CHECKM2_DATA_PATH=${checkm2_db}
