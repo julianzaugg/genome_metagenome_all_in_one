@@ -139,9 +139,11 @@ workflow NANOPORE_METAGENOME {
             ch_per_rep,
             file(params.gtdbtk_db, checkIfExists: true),
             optpath(params.genomespot_models),
+            optpath(params.dram_db),
             !params.skip_taxonomy,
             params.run_genomespot,
-            params.run_barrnap
+            params.run_barrnap,
+            params.run_dram_bins
         )
     }
 

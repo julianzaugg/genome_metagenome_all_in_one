@@ -11,6 +11,7 @@ include { GTDBTK_CLASSIFYWF }            from '../../modules/nf-core/gtdbtk/clas
 include { PYRODIGAL as PYRODIGAL_BINS }  from '../../modules/local/pyrodigal'
 include { GENOMESPOT; GENOMESPOT_COMBINE } from '../../modules/local/genomespot'
 include { BARRNAP }                      from '../../modules/local/barrnap'
+include { DRAM_ANNOTATE_BINS; DRAM_DISTILL } from '../../modules/local/dram'
 
 workflow GENOME_TAXONOMY_QC {
     take:
@@ -18,9 +19,11 @@ workflow GENOME_TAXONOMY_QC {
     per_genome        // [ meta, fasta ] per genome
     gtdbtk_db         // path
     genomespot_models // path (may be [])
+    dram_db           // path (may be [])
     run_taxonomy      // bool
     run_genomespot    // bool
     run_barrnap       // bool
+    run_dram_bins     // bool
 
     main:
     ch_gtdbtk = Channel.empty()
@@ -33,13 +36,28 @@ workflow GENOME_TAXONOMY_QC {
         ch_gtdbtk = GTDBTK_CLASSIFYWF.out.summary
     }
 
+    // Run pyrodigal once if either GenomeSPOT or DRAM-bins needs per-bin proteins
+    ch_proteins = Channel.empty()
+    if (run_genomespot || run_dram_bins) {
+        PYRODIGAL_BINS(per_genome)
+        ch_proteins = PYRODIGAL_BINS.out.faa
+    }
+
     ch_genomespot = Channel.empty()
     if (run_genomespot) {
-        PYRODIGAL_BINS(per_genome)
-        ch_gs_in = per_genome.join(PYRODIGAL_BINS.out.faa)   // [meta, fasta, faa]
+        ch_gs_in = per_genome.join(ch_proteins)   // [meta, fasta, faa]
         GENOMESPOT(ch_gs_in, genomespot_models)
         ch_genomespot = GENOMESPOT.out.predictions
         GENOMESPOT_COMBINE(GENOMESPOT.out.predictions.map { _meta, tsv -> tsv }.collect())
+    }
+
+    ch_dram_annotations = Channel.empty()
+    ch_dram_distilled   = Channel.empty()
+    if (run_dram_bins) {
+        DRAM_ANNOTATE_BINS(ch_proteins, dram_db)
+        DRAM_DISTILL(DRAM_ANNOTATE_BINS.out.annotations)
+        ch_dram_annotations = DRAM_ANNOTATE_BINS.out.annotations
+        ch_dram_distilled   = DRAM_DISTILL.out.distilled
     }
 
     ch_rrna = Channel.empty()
@@ -49,7 +67,9 @@ workflow GENOME_TAXONOMY_QC {
     }
 
     emit:
-    gtdbtk     = ch_gtdbtk
-    genomespot = ch_genomespot
-    rrna       = ch_rrna
+    gtdbtk           = ch_gtdbtk
+    genomespot       = ch_genomespot
+    rrna             = ch_rrna
+    dram_annotations = ch_dram_annotations
+    dram_distilled   = ch_dram_distilled
 }

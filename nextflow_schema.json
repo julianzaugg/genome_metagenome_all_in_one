@@ -105,6 +105,7 @@
                 "run_nonpareil":        { "type": "boolean", "default": true },
                 "run_genomespot":       { "type": "boolean", "default": true },
                 "run_barrnap":          { "type": "boolean", "default": true },
+                "run_dram_bins":        { "type": "boolean", "default": false },
                 "run_checkm1":          { "type": "boolean", "default": true },
                 "run_fastani":          { "type": "boolean", "default": true },
                 "run_parsnp":           { "type": "boolean", "default": true },
