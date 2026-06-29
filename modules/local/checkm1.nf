@@ -17,10 +17,11 @@ process CHECKM1_LINEAGEWF {
 
     script:
     def args = task.ext.args ?: ''
+    def pplacer_threads = Math.min(task.cpus as int, 4)  // pplacer hangs with many threads (github.com/Ecogenomics/CheckM/issues/341)
     """
     checkm lineage_wf ${args} \\
         -x fasta \\
-        -t ${task.cpus} --pplacer_threads ${task.cpus} \\
+        -t ${task.cpus} --pplacer_threads ${pplacer_threads} \\
         --tab_table -f checkm_lineage_wf_results.tsv \\
         bins checkm1
 
