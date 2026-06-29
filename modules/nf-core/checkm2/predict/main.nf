@@ -23,12 +23,18 @@ process CHECKM2_PREDICT {
     def args = task.ext.args ?: ''
     prefix = task.ext.prefix ?: "${meta.id}"
     """
+    # --database_path requires the .dmnd file; resolve it if a directory was staged
+    db_path="${db}"
+    if [ -d "\${db_path}" ]; then
+        db_path=\$(find "\${db_path}" -name "*.dmnd" | head -1)
+    fi
+
     checkm2 \\
         predict \\
         --input ${fasta} \\
         --output-directory ${prefix} \\
         --threads ${task.cpus} \\
-        --database_path ${db} \\
+        --database_path "\${db_path}" \\
         ${args}
 
     cp ${prefix}/quality_report.tsv ${prefix}_checkm2_report.tsv
