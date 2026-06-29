@@ -3,8 +3,9 @@ From: python:3.11-slim
 
 %post
     apt-get update -qq && apt-get install -y --no-install-recommends git procps && rm -rf /var/lib/apt/lists/*
-    pip install --no-cache-dir "numpy==1.24.4" "scikit-learn==1.2.2" "hmmlearn==0.3.0" && \
-    pip install --no-cache-dir "git+https://github.com/cultivarium/GenomeSPOT.git@v1.0.1"
+    pip install --no-cache-dir \
+        "numpy==1.24.4" "scikit-learn==1.2.2" "hmmlearn==0.3.0" \
+        "git+https://github.com/cultivarium/GenomeSPOT.git@v1.0.1"
 
 %runscript
     exec python "$@"
