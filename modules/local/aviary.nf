@@ -50,6 +50,8 @@ EOF
     export EGGNOG_DATA_DIR=${eggnog_db}
     export SINGLEM_METAPACKAGE_PATH=\${SINGLEM_METAPACKAGE_PATH:-not_required_with_skip_singlem}
     export METABULI_DB_PATH=\${METABULI_DB_PATH:-not_required_by_gmaio_aviary_recover}
+    # Redirect pixi's repodata cache off NFS (Bunya home dirs) onto local /tmp
+    export PIXI_CACHE_DIR=\${PIXI_CACHE_DIR:-/tmp/pixi-cache-\${USER:-runner}}
 
     aviary recover ${args} \\
         --assembly ${assembly} \\
