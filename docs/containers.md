@@ -55,25 +55,48 @@ Caveats:
 
 ### Aviary SIF
 
-The upstream Aviary Dockerfile installs `pixi`, installs `aviary-genome`, and
-runs `aviary build` so the non-GPU pixi environments exist inside the image. The
-important runtime property is that this command succeeds inside the SIF:
+The image is maintained at
+[julianzaugg/aviary](https://github.com/julianzaugg/aviary) and built
+automatically by GitHub Actions on every `v*` tag push or manual trigger.
+It installs pixi, clones the upstream aviary repo, pip-installs
+`aviary-genome`, runs `aviary build` to pre-build all non-GPU pixi
+environments, and bakes the conda env PATH into a static `/entrypoint.sh`
+so aviary starts without pixi at the outer level.
+
+**Pull from Docker Hub (recommended):**
 
 ```bash
-apptainer exec containers/aviary_0.13.0.sif pixi --version
-apptainer exec containers/aviary_0.13.0.sif aviary --version
+# On the machine where the SIF will be used (e.g. page, Bunya)
+apptainer pull docker://julianzaugg/aviary:0.13.0
+mv aviary_0.13.0.sif /path/to/gmaio/containers/
 ```
 
-One practical build route is:
+**Verify:**
 
 ```bash
-git clone https://github.com/rhysnewell/aviary /tmp/aviary
-cd /tmp/aviary/docker
-AVIARY_VERSION=0.13.0
-sed "s/AVIARY_VERSION/$AVIARY_VERSION/g" Dockerfile.in > Dockerfile
-DOCKER_BUILDKIT=1 docker build -t aviary:$AVIARY_VERSION .
-apptainer build /path/to/gmaio/containers/aviary_0.13.0.sif docker-daemon://aviary:$AVIARY_VERSION
+apptainer run containers/aviary_0.13.0.sif --help
 ```
+
+**Rebuild the Docker image** (e.g. to update the aviary version):
+
+1. Update the `git checkout` line and version in
+   [julianzaugg/aviary/docker/Dockerfile](https://github.com/julianzaugg/aviary/blob/main/docker/Dockerfile)
+2. Commit and push to `main`
+3. Go to Actions → "Build and push Docker image" → Run workflow → enter the new tag
+4. Re-pull the SIF on the compute host
+
+**Runtime notes:**
+
+- Aviary's Snakemake rules call `pixi run` internally for subtools (coverm,
+  rosella, etc.). On servers with NFS home directories, set `PIXI_CACHE_DIR`
+  to local scratch — the module already exports
+  `PIXI_CACHE_DIR=/tmp/pixi-cache-$USER` automatically.
+- If pixi still hits read-only filesystem errors during a real run, add
+  `runOptions = '--writable-tmpfs'` to the `apptainer {}` block in your
+  local config.
+- The SIF requires `procps` (`ps`) for Nextflow task metrics. Images built
+  from commit `21db7ff` onward include it. For older SIFs, add
+  `runOptions = '--bind /usr/bin/ps:/usr/bin/ps'` to the `apptainer {}` block.
 
 If your image lives elsewhere, pass `--aviary_container /path/to/aviary_0.13.0.sif`
 or set that parameter in a profile.
