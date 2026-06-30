@@ -5,7 +5,7 @@ Override per profile (Bunya paths differ from `/srv`) or on the command line.
 
 | Param                   | Tool(s)            | Default (`/srv`) |
 |-------------------------|--------------------|------------------|
-| `--gtdbtk_db`           | GTDB-Tk, Aviary    | `/srv/db/gtdbtk/official/release226` |
+| `--gtdbtk_db`           | GTDB-Tk, Aviary    | `/srv/db/gtdbtk/official/release232` |
 | `--checkm2_db`          | CheckM2, Aviary    | `/srv/db/checkm2_data/1.0.2/CheckM2_database` |
 | `--checkm1_db`          | CheckM1            | `/srv/db/checkm1` |
 | `--singlem_metapackage` | SingleM            | `/srv/db/singlem_packages/S6.5.0.GTDB_r232.metapackage_20260319.smpkg.zb` |
