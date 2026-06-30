@@ -20,15 +20,16 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 11_pyrodigal/           # predicted proteins/genes per assembly
 12_gene_catalogue/      # cd-hit catalogue(s) + nucleotide CDS + membership (provenance)
 13_dram/                # DRAM functional annotation of the catalogue
-14_gtdbtk/              # GTDB-Tk classification of representatives
-15_checkm1/             # CheckM1 on all bins (if --run_checkm1) — also feeds HQ selection
-16_nonpareil/           # coverage redundancy (if --run_nonpareil)
-17_genomespot/          # growth predictions (if --run_genomespot)
-18_barrnap/             # rRNA / 16S per representative (if --run_barrnap)
-19_genomad/             # virus/plasmid prediction + pooled seqs/proteins/genes/summary
-20_checkv/              # CheckV quality of pooled viruses
-21_checkv_clustering/   # ANI clusters (virus + plasmid)
-22_rpkm/                # SingleM-normalized RPKM for the gene catalogue
+14_dram_bins/           # per-bin DRAM annotation + distillation (if --run_dram_bins)
+15_gtdbtk/              # GTDB-Tk classification of representatives
+16_checkm1/             # CheckM1 on all bins (if --run_checkm1) — also feeds HQ selection
+17_nonpareil/           # coverage redundancy (if --run_nonpareil)
+18_genomespot/          # growth predictions (if --run_genomespot)
+19_barrnap/             # rRNA / 16S per representative (if --run_barrnap)
+20_genomad/             # virus/plasmid prediction + pooled seqs/proteins/genes/summary
+21_checkv/              # CheckV quality of pooled viruses
+22_checkv_clustering/   # ANI clusters (virus + plasmid)
+23_rpkm/                # SingleM-normalized RPKM for the gene catalogue
 pipeline_info/          # timeline / report / trace / dag
 ```
 
@@ -67,12 +68,12 @@ comparative outputs under their tool names. Key directories:
 12_amrfinder/
 13_isescan/
 14_comparison_groups/    # materialized sample/reference groups
-14_panaroo/
-15_parsnp/
-16_gubbins/
-17_fastani/
-18_chewbacca/
-19_tree/
+15_panaroo/
+16_parsnp/
+17_gubbins/
+18_fastani/
+19_chewbacca/
+20_tree/
 ```
 
 Nanopore isolate mapping emits separate CoverM outputs for long reads
@@ -85,15 +86,15 @@ Nanopore isolate mapping emits separate CoverM outputs for long reads
   representative.
 - `12_gene_catalogue/gene_catalogue_membership.tsv` — which predicted gene
   (namespaced `<sample>___<gene>`) maps to each catalogue cluster.
-- `22_rpkm/gene_catalogue_rpkm_per_gene_normalised.tsv` — gene-catalogue RPKM
+- `23_rpkm/gene_catalogue_rpkm_per_gene_normalised.tsv` — gene-catalogue RPKM
   normalized by each sample's mean SingleM marker-gene RPKM.
-- `22_rpkm/gene_catalogue_mapped_reads_per_gene.tsv` — selected R1 DIAMOND read
+- `23_rpkm/gene_catalogue_mapped_reads_per_gene.tsv` — selected R1 DIAMOND read
   counts per catalogue gene and sample.
-- `22_rpkm/singlem_sample_rpkm.tsv` and `22_rpkm/singlem_rpkm_means.tsv` —
+- `23_rpkm/singlem_sample_rpkm.tsv` and `23_rpkm/singlem_rpkm_means.tsv` —
   marker-level and per-sample SingleM normalization values.
 - `14_comparison_groups/<group>/entries.tsv` — isolate comparison membership,
   including references and the chosen Parsnp reference.
-- `18_chewbacca/<group>_chewbbaca/genome_hash_map.tsv` — mapping from original
+- `19_chewbacca/<group>_chewbbaca/genome_hash_map.tsv` — mapping from original
   genome ids to chewBBACA-safe FASTA names.
 
 Paths/numbers are set in `conf/modules.config` and easily changed.
