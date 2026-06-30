@@ -111,7 +111,8 @@
                 "run_parsnp":           { "type": "boolean", "default": true },
                 "run_panaroo":          { "type": "boolean", "default": true },
                 "run_chewbbaca":        { "type": "boolean", "default": true },
-                "run_tree":             { "type": "boolean", "default": true }
+                "run_tree":             { "type": "boolean", "default": true },
+                "run_marker_tree":      { "type": "boolean", "default": false, "description": "Build a marker-gene tree of MAGs + selected GTDB references after GTDB-Tk (metagenome modes)." }
             }
         },
         "tool_choice": {
@@ -123,7 +124,17 @@
                 "rpkm_min_read_length": { "type": "integer", "default": 140, "description": "Minimum selected R1 read length retained for RPKM DIAMOND blastx." },
                 "core_alignment":      { "type": "string", "enum": ["parsnp", "snippy"], "default": "parsnp" },
                 "tree_builder":        { "type": "string", "enum": ["iqtree", "raxml"], "default": "iqtree" },
-                "sylph_profile_args":  { "type": "string", "description": "Optional extra arguments for sylph profile." }
+                "sylph_profile_args":  { "type": "string", "description": "Optional extra arguments for sylph profile." },
+                "marker_tree_builder":           { "type": "string", "enum": ["veryfasttree", "iqtree"], "default": "veryfasttree", "description": "Tree builder for the metagenome marker-gene tree." },
+                "marker_tree_genome_source":     { "type": "string", "enum": ["representatives", "all_bins"], "default": "representatives", "description": "Which user genomes to place in the marker-gene tree." },
+                "marker_tree_min_completeness":  { "type": "number", "default": 90, "description": "CheckM2 completeness threshold for genomes placed in the marker-gene tree." },
+                "marker_tree_max_contamination": { "type": "number", "default": 5, "description": "CheckM2 contamination threshold for genomes placed in the marker-gene tree." },
+                "marker_tree_use_closest":       { "type": "boolean", "default": true, "description": "Select closest reference genomes by GTDB-Tk tree topology." },
+                "marker_tree_use_related":       { "type": "boolean", "default": true, "description": "Select one reference per order sharing a bin's order but not its family." },
+                "marker_tree_closest_n":         { "type": "integer", "default": 2, "description": "Number of closest reference leaves per genome." },
+                "marker_tree_related_per_order": { "type": "integer", "default": 1, "description": "Related references kept per order." },
+                "marker_tree_exclude_pattern":   { "type": "string", "description": "Extra regex to exclude leaf names when selecting closest references." },
+                "marker_tree_reference_accessions": { "type": "string", "format": "file-path", "description": "Optional file of GB_/RS_ accessions to add to the marker-gene tree verbatim." }
             }
         },
         "nanopore": {

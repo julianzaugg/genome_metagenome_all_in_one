@@ -26,15 +26,17 @@ workflow GENOME_TAXONOMY_QC {
     run_dram_bins     // bool
 
     main:
-    ch_gtdbtk   = Channel.empty()
-    ch_versions = Channel.empty()
+    ch_gtdbtk        = Channel.empty()
+    ch_gtdbtk_outdir = Channel.empty()
+    ch_versions      = Channel.empty()
     if (run_taxonomy) {
         GTDBTK_CLASSIFYWF(
             genomes.map { g -> [ [id: 'all_genomes'], g ] },
             [ 'gtdb', gtdbtk_db ],
             false
         )
-        ch_gtdbtk = GTDBTK_CLASSIFYWF.out.summary
+        ch_gtdbtk        = GTDBTK_CLASSIFYWF.out.summary
+        ch_gtdbtk_outdir = GTDBTK_CLASSIFYWF.out.gtdb_outdir
         // GTDBTK_CLASSIFYWF emits versions via topic: versions (handled globally)
     }
 
@@ -76,6 +78,7 @@ workflow GENOME_TAXONOMY_QC {
 
     emit:
     gtdbtk           = ch_gtdbtk
+    gtdbtk_outdir    = ch_gtdbtk_outdir
     genomespot       = ch_genomespot
     rrna             = ch_rrna
     dram_annotations = ch_dram_annotations

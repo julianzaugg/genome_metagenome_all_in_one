@@ -20,6 +20,7 @@ include { READ_PROFILING }     from '../subworkflows/local/read_profiling'
 include { HOST_REMOVAL }       from '../subworkflows/local/host_removal'
 include { GENE_CATALOGUE }     from '../subworkflows/local/gene_catalogue'
 include { GENOME_TAXONOMY_QC } from '../subworkflows/local/genome_taxonomy_qc'
+include { MARKER_GENE_TREE }   from '../subworkflows/local/marker_gene_tree'
 include { MOBILE_ELEMENTS }    from '../subworkflows/local/mobile_elements'
 include { RPKM }               from '../subworkflows/local/rpkm'
 
@@ -200,6 +201,16 @@ workflow ILLUMINA_METAGENOME {
             params.run_dram_bins
         )
         ch_versions = ch_versions.mix(GENOME_TAXONOMY_QC.out.versions)
+
+        // --- Marker-gene tree of MAGs + selected GTDB references ---
+        if (params.run_marker_tree && !params.skip_taxonomy) {
+            MARKER_GENE_TREE(
+                GENOME_TAXONOMY_QC.out.gtdbtk_outdir,
+                params.marker_tree_genome_source == 'all_bins' ? ch_all_bins : ch_reps,
+                ch_checkm2_tsv
+            )
+            ch_versions = ch_versions.mix(MARKER_GENE_TREE.out.versions)
+        }
     }
 
     // --- Gene catalogue (from scaffold proteins) ---

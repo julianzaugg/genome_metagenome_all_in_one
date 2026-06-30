@@ -30,8 +30,21 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 21_checkv/              # CheckV quality of pooled viruses
 22_checkv_clustering/   # ANI clusters (virus + plasmid)
 23_rpkm/                # SingleM-normalized RPKM for the gene catalogue
+24_marker_tree/         # MAG + GTDB-reference marker-gene tree (if --run_marker_tree)
 pipeline_info/          # timeline / report / trace / dag
 ```
+
+`24_marker_tree/` (opt-in via `--run_marker_tree`) holds, per domain
+(`bac120`/`ar53`): `<domain>.marker_msa.fasta` (placed genomes + selected
+references, from the GTDB-Tk marker alignment), `<domain>.treefile` (VeryFastTree
+by default, or IQ-TREE via `--marker_tree_builder iqtree`), and the
+`<domain>.reference_genomes.tsv` / `<domain>.closest_references.tsv` selection
+tables. Placed genomes are the `--marker_tree_genome_source` set filtered by
+CheckM2 `--marker_tree_min_completeness` / `--marker_tree_max_contamination`.
+References come from closest-by-topology (`--marker_tree_use_closest`) and/or
+same-order-different-family (`--marker_tree_use_related`) selection, plus any
+`--marker_tree_reference_accessions`; disable both selection modes for a
+genomes-only tree.
 
 `high_quality_representatives/` holds bins passing completeness − 3×contamination ≥ 50
 in **either** CheckM1 **or** CheckM2 (whichever ran). CoverM uses CheckM2 to pick
