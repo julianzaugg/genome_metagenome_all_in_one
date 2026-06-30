@@ -33,6 +33,7 @@ include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
 include { SEQKIT_STATS }                from '../modules/local/read_stats'
+include { READ_STAT_REPORT }            from '../modules/local/read_stat_report'
 include { CLEANIFIER_INDEX }            from '../modules/local/host_removal'
 include { FASTQ_GZIP_TEST }             from '../modules/local/validate'
 include { DUMP_SOFTWARE_VERSIONS }      from '../modules/local/dump_software_versions'
@@ -106,6 +107,11 @@ workflow ILLUMINA_METAGENOME {
     SEQKIT_STATS(ch_read_stats)
     ch_versions = ch_versions.mix(SEQKIT_STATS.out.versions)
 
+    // Read-stat report inputs (filled in as the relevant steps run)
+    ch_scaffold_counts = Channel.value([])
+    ch_repmag_abund    = Channel.value([])
+    ch_hq_reps         = Channel.value([])
+
     // --- Assembly (metaSPAdes) ---
     ch_assembly = Channel.empty()
     if (!params.skip_assembly) {
@@ -122,6 +128,7 @@ workflow ILLUMINA_METAGENOME {
                 .join(ch_clean)
                 .map { meta, scaffolds, reads -> [ meta, reads, scaffolds ] }
         )
+        ch_scaffold_counts = COVERM_CONTIG.out.counts.map { meta, t -> t }.collect().ifEmpty([])
         ch_versions = ch_versions.mix(COVERM_CONTIG.out.versions)
     }
 
@@ -166,6 +173,7 @@ workflow ILLUMINA_METAGENOME {
             ch_reps      = COVERM_CLUSTER.out.representatives.collect()
             ch_per_rep   = COVERM_CLUSTER.out.representatives.flatten()
                                 .map { f -> [ [id: f.baseName], f ] }
+            ch_hq_reps   = COVERM_CLUSTER.out.hq_representatives.collect().ifEmpty([])
             ch_versions = ch_versions.mix(COVERM_CLUSTER.out.versions)
         } else {
             ch_reps    = ch_all_bins
@@ -175,6 +183,7 @@ workflow ILLUMINA_METAGENOME {
         // --- Map QC'd reads to representatives ---
         if (!params.skip_read_mapping) {
             COVERM_GENOME(ch_clean, ch_reps)
+            ch_repmag_abund = COVERM_GENOME.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
             ch_versions = ch_versions.mix(COVERM_GENOME.out.versions)
         }
 
@@ -237,6 +246,17 @@ workflow ILLUMINA_METAGENOME {
         NONPAREIL(ch_clean)
         ch_versions = ch_versions.mix(NONPAREIL.out.versions)
     }
+
+    // --- Read-stat report (per-sample read tracking across all steps) ---
+    READ_STAT_REPORT(
+        'metagenome',
+        SEQKIT_STATS.out.stats.map { meta, stage, t -> t }.collect(),
+        ch_scaffold_counts,
+        [],
+        ch_repmag_abund,
+        ch_hq_reps
+    )
+    ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)
 
     // --- Software versions manifest ---
     // nf-core modules emit tuples via topic: versions; convert to file and merge with local versions

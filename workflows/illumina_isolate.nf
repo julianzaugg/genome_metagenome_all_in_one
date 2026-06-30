@@ -14,6 +14,7 @@ include { CHECKM2_PREDICT }        from '../modules/nf-core/checkm2/predict/main
 include { CHECKM1_LINEAGEWF }      from '../modules/local/checkm1'
 include { COVERM_CONTIG }          from '../modules/local/coverm'
 include { SEQKIT_STATS }           from '../modules/local/read_stats'
+include { READ_STAT_REPORT }       from '../modules/local/read_stat_report'
 include { FASTQ_GZIP_TEST }        from '../modules/local/validate'
 include { DUMP_SOFTWARE_VERSIONS } from '../modules/local/dump_software_versions'
 
@@ -47,6 +48,8 @@ workflow ILLUMINA_ISOLATE {
     }
     SEQKIT_STATS(ch_read_stats)
     ch_versions = ch_versions.mix(SEQKIT_STATS.out.versions)
+
+    ch_scaffold_counts = Channel.value([])
 
     ch_assembly = Channel.empty()
     if (!params.skip_assembly) {
@@ -106,8 +109,20 @@ workflow ILLUMINA_ISOLATE {
                 .join(ch_qc)
                 .map { meta, scaffolds, reads -> [ meta, reads, scaffolds ] }
         )
+        ch_scaffold_counts = COVERM_CONTIG.out.counts.map { meta, t -> t }.collect().ifEmpty([])
         ch_versions = ch_versions.mix(COVERM_CONTIG.out.versions)
     }
+
+    // --- Read-stat report (per-sample read tracking across all steps) ---
+    READ_STAT_REPORT(
+        'isolate',
+        SEQKIT_STATS.out.stats.map { meta, stage, t -> t }.collect(),
+        ch_scaffold_counts,
+        [],
+        [],
+        []
+    )
+    ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)
 
     if (!params.skip_comparative) {
         ISOLATE_COMPARATIVE(

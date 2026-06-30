@@ -18,6 +18,7 @@ include { COVERM_CLUSTER; COVERM_GENOME as COVERM_GENOME_ONT; COVERM_CONTIG as C
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
+include { READ_STAT_REPORT }            from '../modules/local/read_stat_report'
 include { CLEANIFIER_INDEX }            from '../modules/local/host_removal'
 include { DUMP_SOFTWARE_VERSIONS }      from '../modules/local/dump_software_versions'
 
@@ -81,6 +82,11 @@ workflow NANOPORE_METAGENOME {
         ch_clean = ch_reads
     }
 
+    // Read-stat report inputs (filled in as the relevant steps run)
+    ch_scaffold_counts = Channel.value([])
+    ch_repmag_abund    = Channel.value([])
+    ch_hq_reps         = Channel.value([])
+
     ch_assembly = Channel.empty()
     if (!params.skip_assembly) {
         MYLOASM(ch_clean)
@@ -103,6 +109,7 @@ workflow NANOPORE_METAGENOME {
                 .join(ch_clean)
                 .map { meta, scaffolds, reads -> [ meta, reads, scaffolds ] }
         )
+        ch_scaffold_counts = COVERM_CONTIG_ONT.out.counts.map { meta, t -> t }.collect().ifEmpty([])
         ch_versions = ch_versions.mix(COVERM_CONTIG_ONT.out.versions)
     }
 
@@ -140,6 +147,7 @@ workflow NANOPORE_METAGENOME {
             ch_reps      = COVERM_CLUSTER.out.representatives.collect()
             ch_per_rep   = COVERM_CLUSTER.out.representatives.flatten()
                                 .map { f -> [ [id: f.baseName], f ] }
+            ch_hq_reps   = COVERM_CLUSTER.out.hq_representatives.collect().ifEmpty([])
             ch_versions = ch_versions.mix(COVERM_CLUSTER.out.versions)
         } else {
             ch_reps    = ch_all_bins
@@ -148,6 +156,7 @@ workflow NANOPORE_METAGENOME {
 
         if (!params.skip_read_mapping) {
             COVERM_GENOME_ONT(ch_clean, ch_reps)
+            ch_repmag_abund = COVERM_GENOME_ONT.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
             ch_versions = ch_versions.mix(COVERM_GENOME_ONT.out.versions)
         }
 
@@ -192,6 +201,17 @@ workflow NANOPORE_METAGENOME {
         NONPAREIL(ch_clean)
         ch_versions = ch_versions.mix(NONPAREIL.out.versions)
     }
+
+    // --- Read-stat report (per-sample read tracking across all steps) ---
+    READ_STAT_REPORT(
+        'metagenome',
+        LONG_READ_QC.out.stats.map { meta, stage, t -> t }.collect(),
+        ch_scaffold_counts,
+        [],
+        ch_repmag_abund,
+        ch_hq_reps
+    )
+    ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)
 
     // --- Software versions manifest ---
     ch_nfcore_versions = channel.topic('versions')

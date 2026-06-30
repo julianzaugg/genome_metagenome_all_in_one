@@ -6,7 +6,7 @@ they are not kept consistent across modes (each `--mode` is a separate run with
 its own output tree, so there's no reason to). Illumina metagenome layout:
 
 ```
-00_read_stats/          # seqkit stats --tabular --all for raw and QC-step reads
+00_read_stats/          # seqkit stats --tabular --all per stage + read_stat_report.tsv
 01_fastp/               # QC'd reads + reports
 02_sylph/               # sylph combined profile
 03_singlem/             # multi-sample SingleM profile + OTU table
@@ -36,6 +36,23 @@ pipeline_info/          # timeline / report / trace / dag
 `high_quality_representatives/` holds bins passing completeness − 3×contamination ≥ 50
 in **either** CheckM1 **or** CheckM2 (whichever ran). CoverM uses CheckM2 to pick
 representatives, falling back to CheckM1 if CheckM2 is skipped.
+
+`00_read_stats/read_stat_report.tsv` tracks per-sample read counts through every
+step that ran. Counts are summed across mate files (paired reads = forward +
+reverse), and **every `*_percent` column is relative to the raw input**. Column
+shape depends on the mode:
+
+- **Metagenome**: `Sample_ID, GBbp, Raw_count`, then a `<Tool>_count`/`<Tool>_percent`
+  pair per QC stage (Fastp / Porechop / Fastplong / Cleanifier — whichever ran),
+  then `Reads_mapped_Scaffolds`, `Reads_mapped_Rep_MAGs`, and
+  `Reads_mapped_HQ_Rep_MAGs` count/percent (from the CoverM `Count` method; HQ is
+  the subset mapping to `high_quality_representatives/`).
+- **Isolate**: same QC-stage columns, then CoverM mapping stats against the
+  sample's own assembly — `Covered_fraction, Mean_coverage, Read_count,
+  Read_count_percent` (with `_SR` variants when a hybrid nanopore isolate also
+  has short reads mapped).
+
+`GBbp` is the raw total bases (forward + reverse) in gigabasepairs.
 
 `06_aviary/all_aviary_bins/` contains the sample-prefixed Aviary bins used by
 CheckM, dereplication, read mapping, and GTDB-Tk. Filenames follow
