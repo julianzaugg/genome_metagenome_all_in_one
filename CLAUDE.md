@@ -33,6 +33,16 @@ NXF_PLUGINS_MODE=prod NXF_PLUGINS_DIR=$HOME/.nextflow/plugins \
 nextflow run . -profile bunya --mode <mode> --input samplesheet.csv --outdir results
 ```
 
+## Output directory numbering (`conf/modules.config`)
+All `publishDir` paths use a `NN_name` prefix. Numbers must be unique **within
+each mode** (metagenome and isolate run separately, so they can reuse numbers).
+After adding or renaming any `publishDir`, verify no prefix collision exists:
+```bash
+grep -oP '\d{2,3}_\w+' conf/modules.config | sort -V | uniq -c | sort -rn | awk '$1>1'
+```
+A non-empty result means a collision — renumber to resolve before committing.
+Update `docs/output.md` to match whenever numbers change.
+
 ## Conventions
 - Tool flags live in `conf/modules.config` as `ext.args`, never hard-coded in process bodies.
 - Containers set per-process in `conf/containers.config` (biocontainer URI or local `.sif`).
