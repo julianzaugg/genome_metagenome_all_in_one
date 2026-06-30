@@ -178,10 +178,10 @@ workflow ILLUMINA_METAGENOME {
             ch_versions = ch_versions.mix(COVERM_GENOME.out.versions)
         }
 
-        // --- Taxonomy + per-genome QC on representatives ---
+        // --- Taxonomy + per-genome QC on all bins ---
         GENOME_TAXONOMY_QC(
-            ch_reps,
-            ch_per_rep,
+            ch_all_bins,
+            AVIARY_COLLECT_BINS.out.bins.flatten().map { b -> [ [id: b.baseName], b ] },
             file(params.gtdbtk_db, checkIfExists: true),
             optpath(params.genomespot_models),
             optpath(params.dram_db),

@@ -1,6 +1,6 @@
 /*
  * GENOME_TAXONOMY_QC — taxonomy + per-genome analyses on a set of genomes
- * (dereplicated representatives for metagenomes; assemblies for isolates).
+ * (all bins for metagenomes; assemblies for isolates).
  *   GTDB-Tk classify_wf  (all genomes together)
  *   GenomeSPOT           (optional, per-genome: needs proteins)
  *   Barrnap              (optional, per-genome: rRNA / 16S)
