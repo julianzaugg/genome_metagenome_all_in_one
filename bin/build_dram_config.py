@@ -32,7 +32,6 @@ import sys
 SEARCH_DATABASES = {
     'kofam_hmm':      [('kofam_profiles', '.hmm')],
     'kofam_ko_list':  [('kofam_ko_list', '.tsv')],
-    'pfam':           [('pfam', '.mmspro')],
     'dbcan':          [('dbCAN-HMMdb', '.txt')],
     'peptidase':      [('peptidases', '.mmsdb')],
 }
@@ -50,8 +49,15 @@ DRAM_SHEETS = {
     'etc_module_database':   [('etc_module_database', '.tsv'),
                               ('etc_mdoule_database', '.tsv')],
 }
-# Databases deliberately left unset (skipped for speed / not needed for distill).
-UNSET_SEARCH = ['uniref', 'viral', 'vogdb', 'kegg']
+# Databases deliberately left unset:
+#  - uniref:  by far the slowest search; contributes only gene descriptions,
+#             not KEGG-module coverage, so not needed for the distillate.
+#  - pfam:    the mmseqs *profile* search on this DB's pfam.mmspro crashes the
+#             mmseqs build in the DRAM 1.4.6 container ("Score of forward/backward
+#             SW differ"). It is not needed for the distillate (module coverage
+#             comes from kofam), so it is excluded rather than block the run.
+#  - viral/vogdb/kegg: not used for MAG metabolism annotation here.
+UNSET_SEARCH = ['uniref', 'pfam', 'viral', 'vogdb', 'kegg']
 
 
 def pick(dbdir, prefixes):
