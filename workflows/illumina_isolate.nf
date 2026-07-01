@@ -77,9 +77,11 @@ workflow ILLUMINA_ISOLATE {
         ch_assembly,
         file(params.gtdbtk_db, checkIfExists: true),
         optpath(params.genomespot_models),
+        optpath(params.dram_db),
         !params.skip_taxonomy,
         params.run_genomespot,
-        params.run_barrnap
+        params.run_barrnap,
+        params.run_dram_bins
     )
     ch_versions = ch_versions.mix(GENOME_TAXONOMY_QC.out.versions)
 
