@@ -62,7 +62,7 @@ workflow GENOME_TAXONOMY_QC {
     ch_dram_distilled   = Channel.empty()
     if (run_dram_bins) {
         DRAM_ANNOTATE_BINS(ch_proteins, dram_db)
-        DRAM_DISTILL(DRAM_ANNOTATE_BINS.out.annotations)
+        DRAM_DISTILL(DRAM_ANNOTATE_BINS.out.annotations, dram_db)
         ch_dram_annotations = DRAM_ANNOTATE_BINS.out.annotations
         ch_dram_distilled   = DRAM_DISTILL.out.distilled
         ch_versions = ch_versions.mix(DRAM_ANNOTATE_BINS.out.versions)

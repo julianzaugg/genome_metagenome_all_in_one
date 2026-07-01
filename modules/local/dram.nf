@@ -97,6 +97,7 @@ process DRAM_DISTILL {
 
     input:
     tuple val(meta), path(annotations)
+    path(dram_db)
 
     output:
     tuple val(meta), path('distilled'), emit: distilled
@@ -105,6 +106,10 @@ process DRAM_DISTILL {
     script:
     def args = task.ext.args ?: ''
     """
+    if [[ -f "${dram_db}/CONFIG" ]]; then
+        export DRAM_CONFIG_LOCATION="${dram_db}/CONFIG"
+    fi
+
     DRAM.py distill ${args} \\
         --input_file ${annotations} \\
         --output_dir distilled
