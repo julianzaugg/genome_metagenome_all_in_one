@@ -19,12 +19,12 @@ process DRAM_ANNOTATE {
     script:
     def args = task.ext.args ?: ''
     """
-    # DRAM reads DB locations from its config. Some installs keep CONFIG
-    # outside the database directory, so only override it for prepared DB dirs
-    # that actually carry their own CONFIG file.
-    if [[ -f "${dram_db}/CONFIG" ]]; then
-        export DRAM_CONFIG_LOCATION="${dram_db}/CONFIG"
-    fi
+    # The prepared DB dir carries no CONFIG, so DRAM would otherwise fall back to
+    # its packaged default (all paths unset) and annotate against nothing. Build a
+    # config pointing at the staged DB files and point DRAM at it. See
+    # bin/build_dram_config.py for the database selection (uniref90 excluded).
+    build_dram_config.py ${dram_db} LOCAL_DRAM_CONFIG.json
+    export DRAM_CONFIG_LOCATION="\$PWD/LOCAL_DRAM_CONFIG.json"
 
     DRAM.py annotate_genes ${args} \\
         --input_faa ${proteins} \\
@@ -68,9 +68,10 @@ process DRAM_ANNOTATE_BINS {
     script:
     def args = task.ext.args ?: ''
     """
-    if [[ -f "${dram_db}/CONFIG" ]]; then
-        export DRAM_CONFIG_LOCATION="${dram_db}/CONFIG"
-    fi
+    # See DRAM_ANNOTATE: the staged DB carries no CONFIG, so build one that
+    # points at the staged DB files (uniref90 excluded) before annotating.
+    build_dram_config.py ${dram_db} LOCAL_DRAM_CONFIG.json
+    export DRAM_CONFIG_LOCATION="\$PWD/LOCAL_DRAM_CONFIG.json"
 
     DRAM.py annotate_genes ${args} \\
         --input_faa ${proteins} \\
@@ -106,80 +107,11 @@ process DRAM_DISTILL {
     script:
     def args = task.ext.args ?: ''
     """
-    # Build a local DRAM config with valid distill-sheet paths. The staged DB
-    # CONFIG often has dram_sheets entries set to None (paths were absolute to
-    # the setup host and don't resolve inside this container). annotate doesn't
-    # need the sheets; distill does. The sheets ship with the mag_annotator
-    # package (version-suffixed, e.g. genome_summary_form.<date>.tsv), so we
-    # locate them by prefix and backfill any missing/None entries.
-    python3 - <<'PYEOF'
-import json, os, sys
-
-# Distill sheet keys DRAM needs (1.4.x) mapped to the filename prefixes they
-# may appear under on disk. Note 'etc_module_database': DRAM's own DB setup
-# writes the file misspelled ('etc_mdoule_database.<date>.tsv') while the code
-# reads the correctly-spelled config key, so accept both spellings.
-SHEETS = {
-    'genome_summary_form':   ['genome_summary_form'],
-    'module_step_form':      ['module_step_form'],
-    'function_heatmap_form': ['function_heatmap_form'],
-    'amg_database':          ['amg_database'],
-    'etc_module_database':   ['etc_module_database', 'etc_mdoule_database'],
-}
-KEYS = list(SHEETS)
-
-src = '${dram_db}/CONFIG'
-cfg = {}
-if os.path.isfile(src):
-    try:
-        with open(src) as fh:
-            cfg = json.load(fh)
-    except Exception as e:
-        sys.stderr.write("WARN: could not parse %s: %s\\n" % (src, e))
-if not isinstance(cfg, dict):
-    cfg = {}
-
-try:
-    import mag_annotator
-    pkg = os.path.dirname(os.path.abspath(mag_annotator.__file__))
-except Exception:
-    pkg = ''
-
-# Recursively collect candidate .tsv sheets from the package and staged DB dir.
-found = {}
-for root in [pkg, '${dram_db}']:
-    if not root or not os.path.isdir(root):
-        continue
-    for dirpath, _dirs, files in os.walk(root):
-        for fn in files:
-            if not fn.endswith('.tsv'):
-                continue
-            for k, prefixes in SHEETS.items():
-                if k not in found and any(fn.startswith(p) for p in prefixes):
-                    found[k] = os.path.join(dirpath, fn)
-
-sh = cfg.setdefault('dram_sheets', {})
-for k in KEYS:
-    cur = sh.get(k)
-    if (not cur or not os.path.isfile(str(cur))) and k in found:
-        sh[k] = found[k]
-
-# Without a recognised dram_version, DRAM's load_config() treats the file as a
-# pre-1.4.0 config and rebuilds it — looking for sheets as TOP-LEVEL keys and
-# discarding our dram_sheets dict. Stamp a recognised version so it takes the
-# modern path and honours dram_sheets verbatim.
-if not cfg.get('dram_version'):
-    cfg['dram_version'] = '1.4.0'
-
-sys.stderr.write("DRAM distill sheets resolved:\\n")
-for k in KEYS:
-    sys.stderr.write("  %s -> %s\\n" % (k, sh.get(k)))
-
-with open('LOCAL_DRAM_CONFIG.json', 'w') as fh:
-    json.dump(cfg, fh, indent=2)
-PYEOF
-
-    export DRAM_CONFIG_LOCATION="LOCAL_DRAM_CONFIG.json"
+    # Build the same DB config used for annotation so distill can find the
+    # distillation sheets (genome_summary_form, etc_module_database, …), which
+    # the staged DB has but its (absent) CONFIG never points DRAM at.
+    build_dram_config.py ${dram_db} LOCAL_DRAM_CONFIG.json
+    export DRAM_CONFIG_LOCATION="\$PWD/LOCAL_DRAM_CONFIG.json"
 
     DRAM.py distill ${args} \\
         --input_file ${annotations} \\
