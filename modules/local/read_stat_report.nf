@@ -18,6 +18,7 @@ process READ_STAT_REPORT {
     path(scaffold_sr,    stageAs: 'scaffolds_sr/*')
     path(repmag_abund,   stageAs: 'repmags/*')
     path(hq_reps,        stageAs: 'hq/*')
+    path(hq_repmag_abund, stageAs: 'hq_repmags/*')
 
     output:
     path 'read_stat_report.tsv', emit: report
@@ -32,6 +33,7 @@ process READ_STAT_REPORT {
         --scaffold-sr-dir scaffolds_sr \\
         --repmag-dir repmags \\
         --hq-dir hq \\
+        --hq-repmag-dir hq_repmags \\
         --out read_stat_report.tsv
 
     cat <<-END_VERSIONS > versions.yml
@@ -49,6 +51,7 @@ process READ_STAT_REPORT {
         --scaffold-sr-dir scaffolds_sr \\
         --repmag-dir repmags \\
         --hq-dir hq \\
+        --hq-repmag-dir hq_repmags \\
         --out read_stat_report.tsv
 
     echo '"${task.process}": {python: stub}' > versions.yml

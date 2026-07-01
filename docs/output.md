@@ -15,7 +15,8 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 06_aviary/              # Aviary recovery; all_aviary_bins/ is the renamed canonical bin set
 07_checkm2/             # CheckM2 on all bins (drives dereplication + HQ selection)
 08_dereplicated_bins/   # CoverM cluster: representatives/ + high_quality_representatives/ + cluster_definition.tsv
-09_coverm_bins/         # per-sample abundance vs representatives
+09_coverm_bins/         # per-sample abundance vs all dereplicated representatives
+09_coverm_hq_bins/      # per-sample abundance vs high_quality_representatives/ only (no competing siblings)
 10_coverm_scaffolds/    # per-sample coverage/counts vs assembled scaffolds
 11_pyrodigal/           # predicted proteins/genes per assembly
 12_gene_catalogue/      # cd-hit catalogue(s) + nucleotide CDS + membership (provenance)
@@ -57,9 +58,16 @@ shape depends on the mode:
 
 - **Metagenome**: `Sample_ID, GBbp, Raw_count`, then a `<Tool>_count`/`<Tool>_percent`
   pair per QC stage (Fastp / Porechop / Fastplong / Cleanifier — whichever ran),
-  then `Reads_mapped_Scaffolds`, `Reads_mapped_Rep_MAGs`, and
-  `Reads_mapped_HQ_Rep_MAGs` count/percent (from the CoverM `Count` method; HQ is
-  the subset mapping to `high_quality_representatives/`).
+  then `Reads_mapped_Scaffolds`, `Reads_mapped_Rep_MAGs`,
+  `Reads_mapped_HQ_Rep_MAGs`, and `Reads_mapped_HQ_Rep_MAGs_direct` count/percent
+  (from the CoverM `Count` method). The two HQ columns can differ: `_HQ_Rep_MAGs`
+  is the subset of the full `09_coverm_bins/` mapping whose genome matches
+  `high_quality_representatives/`, while `_HQ_Rep_MAGs_direct` comes from a
+  separate `09_coverm_hq_bins/` mapping against the HQ MAGs only. When
+  dereplication leaves redundant near-identical lower-quality bins alongside an
+  HQ rep, competitive mapping in the full-set run splits reads across those
+  siblings and the subset count undercounts — the direct mapping doesn't have
+  that problem.
 - **Isolate**: same QC-stage columns, then CoverM mapping stats against the
   sample's own assembly — `Covered_fraction, Mean_coverage, Read_count,
   Read_count_percent` (with `_SR` variants when a hybrid nanopore isolate also
@@ -81,6 +89,7 @@ read QC and assembly directories:
 03_fastplong/
 07_myloasm/
 09_coverm_bins/         # minimap2-ont, 90% identity
+09_coverm_hq_bins/      # minimap2-ont, 90% identity, HQ representatives only
 10_coverm_scaffolds_nanopore/
 ```
 
@@ -112,7 +121,7 @@ Nanopore isolate mapping emits separate CoverM outputs for long reads
 
 ## Provenance
 
-- `09_dereplicated_bins/cluster_definition.tsv` — which bins collapsed into each
+- `08_dereplicated_bins/cluster_definition.tsv` — which bins collapsed into each
   representative.
 - `12_gene_catalogue/gene_catalogue_membership.tsv` — which predicted gene
   (namespaced `<sample>___<gene>`) maps to each catalogue cluster.

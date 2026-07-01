@@ -29,7 +29,7 @@ include { SPADES }                      from '../modules/nf-core/spades/main'
 include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict/main'
 include { PREP_ASSEMBLY }               from '../modules/local/util'
 include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
-include { COVERM_CLUSTER; COVERM_GENOME; COVERM_CONTIG } from '../modules/local/coverm'
+include { COVERM_CLUSTER; COVERM_GENOME; COVERM_GENOME as COVERM_GENOME_HQ; COVERM_CONTIG } from '../modules/local/coverm'
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
@@ -112,6 +112,7 @@ workflow ILLUMINA_METAGENOME {
     ch_scaffold_counts = Channel.value([])
     ch_repmag_abund    = Channel.value([])
     ch_hq_reps         = Channel.value([])
+    ch_hq_repmag_abund = Channel.value([])
 
     // --- Assembly (metaSPAdes) ---
     ch_assembly = Channel.empty()
@@ -186,6 +187,15 @@ workflow ILLUMINA_METAGENOME {
             COVERM_GENOME(ch_clean, ch_reps)
             ch_repmag_abund = COVERM_GENOME.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
             ch_versions = ch_versions.mix(COVERM_GENOME.out.versions)
+
+            // --- Map the same reads directly to the HQ-only subset (not extracted from
+            // the full-set mapping above) — avoids undercounting HQ MAGs when dereplication
+            // leaves redundant lower-quality near-duplicate bins that split reads away from them ---
+            if (!params.skip_dereplication) {
+                COVERM_GENOME_HQ(ch_clean, ch_hq_reps)
+                ch_hq_repmag_abund = COVERM_GENOME_HQ.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
+                ch_versions = ch_versions.mix(COVERM_GENOME_HQ.out.versions)
+            }
         }
 
         // --- Taxonomy + per-genome QC on all bins ---
@@ -265,7 +275,8 @@ workflow ILLUMINA_METAGENOME {
         ch_scaffold_counts,
         [],
         ch_repmag_abund,
-        ch_hq_reps
+        ch_hq_reps,
+        ch_hq_repmag_abund
     )
     ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)
 

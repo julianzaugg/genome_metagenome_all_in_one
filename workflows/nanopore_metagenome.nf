@@ -15,7 +15,7 @@ include { MYLOASM }                     from '../modules/local/assembly_isolate'
 include { DORADO_POLISH }               from '../modules/local/long_reads'
 include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict/main'
 include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
-include { COVERM_CLUSTER; COVERM_GENOME as COVERM_GENOME_ONT; COVERM_CONTIG as COVERM_CONTIG_ONT } from '../modules/local/coverm'
+include { COVERM_CLUSTER; COVERM_GENOME as COVERM_GENOME_ONT; COVERM_GENOME as COVERM_GENOME_HQ_ONT; COVERM_CONTIG as COVERM_CONTIG_ONT } from '../modules/local/coverm'
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
@@ -87,6 +87,7 @@ workflow NANOPORE_METAGENOME {
     ch_scaffold_counts = Channel.value([])
     ch_repmag_abund    = Channel.value([])
     ch_hq_reps         = Channel.value([])
+    ch_hq_repmag_abund = Channel.value([])
 
     ch_assembly = Channel.empty()
     if (!params.skip_assembly) {
@@ -159,6 +160,14 @@ workflow NANOPORE_METAGENOME {
             COVERM_GENOME_ONT(ch_clean, ch_reps)
             ch_repmag_abund = COVERM_GENOME_ONT.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
             ch_versions = ch_versions.mix(COVERM_GENOME_ONT.out.versions)
+
+            // --- Map the same reads directly to the HQ-only subset (see illumina_metagenome.nf
+            // for why this is kept separate from the full-set subset extraction) ---
+            if (!params.skip_dereplication) {
+                COVERM_GENOME_HQ_ONT(ch_clean, ch_hq_reps)
+                ch_hq_repmag_abund = COVERM_GENOME_HQ_ONT.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
+                ch_versions = ch_versions.mix(COVERM_GENOME_HQ_ONT.out.versions)
+            }
         }
 
         GENOME_TAXONOMY_QC(
@@ -220,7 +229,8 @@ workflow NANOPORE_METAGENOME {
         ch_scaffold_counts,
         [],
         ch_repmag_abund,
-        ch_hq_reps
+        ch_hq_reps,
+        ch_hq_repmag_abund
     )
     ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)
 

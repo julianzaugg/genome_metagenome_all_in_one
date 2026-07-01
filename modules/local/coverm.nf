@@ -18,7 +18,7 @@ process COVERM_CLUSTER {
     path 'versions.yml',                             emit: versions
 
     script:
-    def args    = task.ext.args ?: '--precluster-method finch --ani 0.97'
+    def args    = task.ext.args ?: '--precluster-method finch --ani 0.95'
     def quality = task.ext.quality ?: 50   // completeness - weight*contamination >= quality
     def weight  = task.ext.weight  ?: 3
     """
@@ -90,12 +90,18 @@ process COVERM_GENOME {
     def args = task.ext.args ?: ''
     def reads_arg = meta.single_end ? "--single ${reads}" : "-c ${reads[0]} ${reads[1]}"
     """
-    coverm genome ${args} \\
-        --threads ${task.cpus} \\
-        --genome-fasta-files genomes/*.fasta \\
-        --genome-fasta-extension fasta \\
-        --output-file ${meta.id}_abundances.tsv \\
-        ${reads_arg}
+    # No reference genomes staged (e.g. no bins passed the HQ filter) -> emit an
+    # empty table instead of letting coverm fail on an unmatched fasta glob.
+    if ls genomes/*.fasta >/dev/null 2>&1; then
+        coverm genome ${args} \\
+            --threads ${task.cpus} \\
+            --genome-fasta-files genomes/*.fasta \\
+            --genome-fasta-extension fasta \\
+            --output-file ${meta.id}_abundances.tsv \\
+            ${reads_arg}
+    else
+        echo -e "Genome\\t${meta.id} Relative Abundance (%)" > ${meta.id}_abundances.tsv
+    fi
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
