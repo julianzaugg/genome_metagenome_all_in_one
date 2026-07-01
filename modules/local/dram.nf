@@ -26,7 +26,7 @@ process DRAM_ANNOTATE {
     build_dram_config.py ${dram_db} LOCAL_DRAM_CONFIG.json
     export DRAM_CONFIG_LOCATION="\$PWD/LOCAL_DRAM_CONFIG.json"
 
-    DRAM.py annotate_genes ${args} \\
+    dram.sh annotate_genes ${args} \\
         --input_faa ${proteins} \\
         --output_dir dram_annotations \\
         --threads ${task.cpus}
@@ -73,7 +73,7 @@ process DRAM_ANNOTATE_BINS {
     build_dram_config.py ${dram_db} LOCAL_DRAM_CONFIG.json
     export DRAM_CONFIG_LOCATION="\$PWD/LOCAL_DRAM_CONFIG.json"
 
-    DRAM.py annotate_genes ${args} \\
+    dram.sh annotate_genes ${args} \\
         --input_faa ${proteins} \\
         --output_dir dram_annotations \\
         --threads ${task.cpus}
@@ -113,7 +113,7 @@ process DRAM_DISTILL {
     build_dram_config.py ${dram_db} LOCAL_DRAM_CONFIG.json
     export DRAM_CONFIG_LOCATION="\$PWD/LOCAL_DRAM_CONFIG.json"
 
-    DRAM.py distill ${args} \\
+    dram.sh distill ${args} \\
         --input_file ${annotations} \\
         --output_dir distilled
 
