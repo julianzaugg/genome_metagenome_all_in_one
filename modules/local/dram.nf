@@ -106,9 +106,47 @@ process DRAM_DISTILL {
     script:
     def args = task.ext.args ?: ''
     """
-    if [[ -f "${dram_db}/CONFIG" ]]; then
-        export DRAM_CONFIG_LOCATION="${dram_db}/CONFIG"
-    fi
+    # Build a local DRAM config that merges the staged DB config with valid
+    # sheet paths. The dram_sheets entries are often None when the DB was set
+    # up outside this container; distill (unlike annotate) needs them.
+    python3 - <<'PYEOF'
+import json, os
+
+src = '${dram_db}/CONFIG'
+cfg = {}
+if os.path.isfile(src):
+    try:
+        cfg = json.load(open(src))
+    except Exception:
+        pass
+
+try:
+    import mag_annotator
+    pkg = os.path.dirname(os.path.abspath(mag_annotator.__file__))
+except ImportError:
+    pkg = ''
+
+search_dirs = [
+    os.path.join(pkg, 'data') if pkg else '',
+    os.path.join(pkg, 'dram_sheets') if pkg else '',
+    '${dram_db}',
+    '${dram_db}/dram_sheets',
+]
+for d in search_dirs:
+    if d and os.path.isfile(os.path.join(d, 'genome_summary_form.tsv')):
+        sh = cfg.setdefault('dram_sheets', {})
+        for fn in os.listdir(d):
+            if fn.endswith('.tsv'):
+                k = fn[:-4]
+                existing = sh.get(k)
+                if not existing or not os.path.isfile(str(existing)):
+                    sh[k] = os.path.join(d, fn)
+        break
+
+json.dump(cfg, open('LOCAL_DRAM_CONFIG.json', 'w'), indent=2)
+PYEOF
+
+    export DRAM_CONFIG_LOCATION="LOCAL_DRAM_CONFIG.json"
 
     DRAM.py distill ${args} \\
         --input_file ${annotations} \\
