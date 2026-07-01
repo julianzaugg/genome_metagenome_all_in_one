@@ -11,7 +11,7 @@ include { GTDBTK_CLASSIFYWF }            from '../../modules/nf-core/gtdbtk/clas
 include { PYRODIGAL as PYRODIGAL_BINS }  from '../../modules/local/pyrodigal'
 include { GENOMESPOT; GENOMESPOT_COMBINE } from '../../modules/local/genomespot'
 include { BARRNAP }                      from '../../modules/local/barrnap'
-include { DRAM_ANNOTATE_BINS; DRAM_DISTILL } from '../../modules/local/dram'
+include { DRAM_ANNOTATE_BINS; DRAM_COMBINE_ANNOTATIONS; DRAM_DISTILL } from '../../modules/local/dram'
 
 workflow GENOME_TAXONOMY_QC {
     take:
@@ -62,10 +62,17 @@ workflow GENOME_TAXONOMY_QC {
     ch_dram_distilled   = Channel.empty()
     if (run_dram_bins) {
         DRAM_ANNOTATE_BINS(ch_proteins, dram_db)
-        DRAM_DISTILL(DRAM_ANNOTATE_BINS.out.annotations, dram_db)
+        // Concatenate all per-bin annotations (each tagged with its bin via the
+        // 'fasta' column) and distill once into a single cross-MAG summary.
+        DRAM_COMBINE_ANNOTATIONS(DRAM_ANNOTATE_BINS.out.annotations.map { _meta, tsv -> tsv }.collect())
+        DRAM_DISTILL(
+            DRAM_COMBINE_ANNOTATIONS.out.annotations.map { tsv -> [ [id: 'all_bins'], tsv ] },
+            dram_db
+        )
         ch_dram_annotations = DRAM_ANNOTATE_BINS.out.annotations
         ch_dram_distilled   = DRAM_DISTILL.out.distilled
         ch_versions = ch_versions.mix(DRAM_ANNOTATE_BINS.out.versions)
+        ch_versions = ch_versions.mix(DRAM_COMBINE_ANNOTATIONS.out.versions)
         ch_versions = ch_versions.mix(DRAM_DISTILL.out.versions)
     }
 

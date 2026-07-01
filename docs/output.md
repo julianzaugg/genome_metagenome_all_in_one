@@ -19,8 +19,8 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 10_coverm_scaffolds/    # per-sample coverage/counts vs assembled scaffolds
 11_pyrodigal/           # predicted proteins/genes per assembly
 12_gene_catalogue/      # cd-hit catalogue(s) + nucleotide CDS + membership (provenance)
-13_dram/                # DRAM functional annotation of the catalogue
-14_dram_bins/           # per-bin DRAM annotation + distillation (if --run_dram_bins)
+13_dram/                # DRAM functional annotation of the catalogue (annotated in parallel chunks, merged)
+14_dram_bins/           # per-bin DRAM annotation + combined cross-MAG distillate in all_bins/ (if --run_dram_bins)
 15_gtdbtk/              # GTDB-Tk classification of representatives
 16_checkm1/             # CheckM1 on all bins (if --run_checkm1) — also feeds HQ selection
 17_nonpareil/           # coverage redundancy (if --run_nonpareil)

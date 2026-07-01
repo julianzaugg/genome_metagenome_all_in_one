@@ -7,11 +7,12 @@
  *     -> CDHIT (100% + 90%)
  *          -> CATALOGUE_CDS      (nucleotide CDS for 100% reps)
  *          -> CATALOGUE_TABULATE (membership of the 100% catalogue)
- *          -> DRAM_ANNOTATE      (functional annotation of the 100% catalogue)
+ *          -> DRAM (split -> annotate chunks in parallel -> merge; functional
+ *                   annotation of the 100% catalogue)
  */
 
 include { CATALOGUE_PREP; CDHIT; CATALOGUE_CDS; CATALOGUE_TABULATE } from '../../modules/local/gene_catalogue'
-include { DRAM_ANNOTATE }                                          from '../../modules/local/dram'
+include { DRAM_ANNOTATE_SPLIT; DRAM_ANNOTATE; DRAM_ANNOTATE_MERGE } from '../../modules/local/dram'
 
 workflow GENE_CATALOGUE {
     take:
@@ -37,9 +38,18 @@ workflow GENE_CATALOGUE {
         .mix(CATALOGUE_CDS.out.versions)
         .mix(CATALOGUE_TABULATE.out.versions)
     if (run_annotation) {
-        DRAM_ANNOTATE(CDHIT.out.catalogue, dram_db)
-        ch_annotations = DRAM_ANNOTATE.out.annotations
-        ch_versions = ch_versions.mix(DRAM_ANNOTATE.out.versions)
+        // Scatter the catalogue across chunks, annotate in parallel, reassemble.
+        DRAM_ANNOTATE_SPLIT(CDHIT.out.catalogue)
+        DRAM_ANNOTATE(DRAM_ANNOTATE_SPLIT.out.chunks.flatten(), dram_db)
+        DRAM_ANNOTATE_MERGE(
+            DRAM_ANNOTATE.out.annotations.collect(),
+            DRAM_ANNOTATE.out.annotated_faa.collect()
+        )
+        ch_annotations = DRAM_ANNOTATE_MERGE.out.annotations
+        ch_versions = ch_versions
+            .mix(DRAM_ANNOTATE_SPLIT.out.versions)
+            .mix(DRAM_ANNOTATE.out.versions.first())
+            .mix(DRAM_ANNOTATE_MERGE.out.versions)
     }
 
     emit:
