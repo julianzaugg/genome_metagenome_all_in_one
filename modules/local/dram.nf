@@ -155,6 +155,13 @@ for k in KEYS:
     if (not cur or not os.path.isfile(str(cur))) and k in found:
         sh[k] = found[k]
 
+# Without a recognised dram_version, DRAM's load_config() treats the file as a
+# pre-1.4.0 config and rebuilds it — looking for sheets as TOP-LEVEL keys and
+# discarding our dram_sheets dict. Stamp a recognised version so it takes the
+# modern path and honours dram_sheets verbatim.
+if not cfg.get('dram_version'):
+    cfg['dram_version'] = '1.4.0'
+
 sys.stderr.write("DRAM distill sheets resolved:\\n")
 for k in KEYS:
     sys.stderr.write("  %s -> %s\\n" % (k, sh.get(k)))
