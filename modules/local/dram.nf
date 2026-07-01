@@ -106,44 +106,61 @@ process DRAM_DISTILL {
     script:
     def args = task.ext.args ?: ''
     """
-    # Build a local DRAM config that merges the staged DB config with valid
-    # sheet paths. The dram_sheets entries are often None when the DB was set
-    # up outside this container; distill (unlike annotate) needs them.
+    # Build a local DRAM config with valid distill-sheet paths. The staged DB
+    # CONFIG often has dram_sheets entries set to None (paths were absolute to
+    # the setup host and don't resolve inside this container). annotate doesn't
+    # need the sheets; distill does. The sheets ship with the mag_annotator
+    # package (version-suffixed, e.g. genome_summary_form.<date>.tsv), so we
+    # locate them by prefix and backfill any missing/None entries.
     python3 - <<'PYEOF'
-import json, os
+import json, os, sys
+
+# distill sheet keys DRAM needs (1.4.x)
+KEYS = ['genome_summary_form', 'module_step_form', 'function_heatmap_form',
+        'amg_database', 'etc_module_database']
 
 src = '${dram_db}/CONFIG'
 cfg = {}
 if os.path.isfile(src):
     try:
-        cfg = json.load(open(src))
-    except Exception:
-        pass
+        with open(src) as fh:
+            cfg = json.load(fh)
+    except Exception as e:
+        sys.stderr.write("WARN: could not parse %s: %s\\n" % (src, e))
+if not isinstance(cfg, dict):
+    cfg = {}
 
 try:
     import mag_annotator
     pkg = os.path.dirname(os.path.abspath(mag_annotator.__file__))
-except ImportError:
+except Exception:
     pkg = ''
 
-search_dirs = [
-    os.path.join(pkg, 'data') if pkg else '',
-    os.path.join(pkg, 'dram_sheets') if pkg else '',
-    '${dram_db}',
-    '${dram_db}/dram_sheets',
-]
-for d in search_dirs:
-    if d and os.path.isfile(os.path.join(d, 'genome_summary_form.tsv')):
-        sh = cfg.setdefault('dram_sheets', {})
-        for fn in os.listdir(d):
-            if fn.endswith('.tsv'):
-                k = fn[:-4]
-                existing = sh.get(k)
-                if not existing or not os.path.isfile(str(existing)):
-                    sh[k] = os.path.join(d, fn)
-        break
+# Recursively collect candidate .tsv sheets from the package and staged DB dir.
+found = {}
+for root in [pkg, '${dram_db}']:
+    if not root or not os.path.isdir(root):
+        continue
+    for dirpath, _dirs, files in os.walk(root):
+        for fn in files:
+            if not fn.endswith('.tsv'):
+                continue
+            for k in KEYS:
+                if fn.startswith(k) and k not in found:
+                    found[k] = os.path.join(dirpath, fn)
 
-json.dump(cfg, open('LOCAL_DRAM_CONFIG.json', 'w'), indent=2)
+sh = cfg.setdefault('dram_sheets', {})
+for k in KEYS:
+    cur = sh.get(k)
+    if (not cur or not os.path.isfile(str(cur))) and k in found:
+        sh[k] = found[k]
+
+sys.stderr.write("DRAM distill sheets resolved:\\n")
+for k in KEYS:
+    sys.stderr.write("  %s -> %s\\n" % (k, sh.get(k)))
+
+with open('LOCAL_DRAM_CONFIG.json', 'w') as fh:
+    json.dump(cfg, fh, indent=2)
 PYEOF
 
     export DRAM_CONFIG_LOCATION="LOCAL_DRAM_CONFIG.json"
