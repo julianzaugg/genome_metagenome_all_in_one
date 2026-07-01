@@ -115,9 +115,18 @@ process DRAM_DISTILL {
     python3 - <<'PYEOF'
 import json, os, sys
 
-# distill sheet keys DRAM needs (1.4.x)
-KEYS = ['genome_summary_form', 'module_step_form', 'function_heatmap_form',
-        'amg_database', 'etc_module_database']
+# Distill sheet keys DRAM needs (1.4.x) mapped to the filename prefixes they
+# may appear under on disk. Note 'etc_module_database': DRAM's own DB setup
+# writes the file misspelled ('etc_mdoule_database.<date>.tsv') while the code
+# reads the correctly-spelled config key, so accept both spellings.
+SHEETS = {
+    'genome_summary_form':   ['genome_summary_form'],
+    'module_step_form':      ['module_step_form'],
+    'function_heatmap_form': ['function_heatmap_form'],
+    'amg_database':          ['amg_database'],
+    'etc_module_database':   ['etc_module_database', 'etc_mdoule_database'],
+}
+KEYS = list(SHEETS)
 
 src = '${dram_db}/CONFIG'
 cfg = {}
@@ -145,8 +154,8 @@ for root in [pkg, '${dram_db}']:
         for fn in files:
             if not fn.endswith('.tsv'):
                 continue
-            for k in KEYS:
-                if fn.startswith(k) and k not in found:
+            for k, prefixes in SHEETS.items():
+                if k not in found and any(fn.startswith(p) for p in prefixes):
                     found[k] = os.path.join(dirpath, fn)
 
 sh = cfg.setdefault('dram_sheets', {})
