@@ -55,9 +55,9 @@ process DRAM_ANNOTATE {
     path(dram_db)
 
     output:
-    path 'dram_annotations/annotations.tsv',      emit: annotations
-    path 'dram_annotations/genes.annotated.faa',  emit: annotated_faa
-    path 'versions.yml',                          emit: versions
+    path 'dram_annotations/annotations.tsv', emit: annotations
+    path 'dram_annotations/genes.faa',       emit: annotated_faa
+    path 'versions.yml',                     emit: versions
 
     script:
     def args = task.ext.args ?: ''
@@ -84,7 +84,7 @@ process DRAM_ANNOTATE {
     """
     mkdir -p dram_annotations
     echo -e "\\tfasta\\tko_id" > dram_annotations/annotations.tsv
-    echo -e ">${proteins.baseName}_gene1\\nMASE" > dram_annotations/genes.annotated.faa
+    echo -e ">${proteins.baseName}_gene1\\nMASE" > dram_annotations/genes.faa
     echo '"${task.process}": {dram: stub}' > versions.yml
     """
 }
@@ -105,7 +105,7 @@ process DRAM_ANNOTATE_MERGE {
     """
     mkdir -p dram_annotations
     combine_dram_annotations.py dram_annotations/annotations.tsv --glob 'anno_*.tsv'
-    cat faa_*.faa > dram_annotations/genes.annotated.faa
+    cat faa_*.faa > dram_annotations/genes.faa
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -117,7 +117,7 @@ process DRAM_ANNOTATE_MERGE {
     """
     mkdir -p dram_annotations
     echo -e "\\tfasta\\tko_id" > dram_annotations/annotations.tsv
-    touch dram_annotations/genes.annotated.faa
+    touch dram_annotations/genes.faa
     echo '"${task.process}": {pandas: stub}' > versions.yml
     """
 }
