@@ -29,7 +29,7 @@ include { SPADES }                      from '../modules/nf-core/spades/main'
 include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict/main'
 include { PREP_ASSEMBLY }               from '../modules/local/util'
 include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
-include { COVERM_CLUSTER; COVERM_GENOME; COVERM_GENOME as COVERM_GENOME_HQ; COVERM_CONTIG } from '../modules/local/coverm'
+include { COVERM_CLUSTER; COVERM_CLUSTER_HQ; COVERM_GENOME; COVERM_GENOME as COVERM_GENOME_HQ; COVERM_GENOME as COVERM_GENOME_HQ_DEREP; COVERM_CONTIG } from '../modules/local/coverm'
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
@@ -177,6 +177,11 @@ workflow ILLUMINA_METAGENOME {
                                 .map { f -> [ [id: f.baseName], f ] }
             ch_hq_reps   = COVERM_CLUSTER.out.hq_representatives.collect().ifEmpty([])
             ch_versions = ch_versions.mix(COVERM_CLUSTER.out.versions)
+
+            // HQ-first: extract HQ MAGs from the FULL bin set, THEN dereplicate them
+            COVERM_CLUSTER_HQ(ch_all_bins, ch_checkm2_tsv, ch_checkm1_tsv)
+            ch_hq_derep_reps = COVERM_CLUSTER_HQ.out.representatives.collect().ifEmpty([])
+            ch_versions = ch_versions.mix(COVERM_CLUSTER_HQ.out.versions)
         } else {
             ch_reps    = ch_all_bins
             ch_per_rep = AVIARY_COLLECT_BINS.out.bins.flatten().map { b -> [ [id: b.baseName], b ] }
@@ -195,6 +200,11 @@ workflow ILLUMINA_METAGENOME {
                 COVERM_GENOME_HQ(ch_clean, ch_hq_reps)
                 ch_hq_repmag_abund = COVERM_GENOME_HQ.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
                 ch_versions = ch_versions.mix(COVERM_GENOME_HQ.out.versions)
+
+                // Map the same reads to the HQ-first-then-dereplicated set
+                COVERM_GENOME_HQ_DEREP(ch_clean, ch_hq_derep_reps)
+                ch_hq_derep_abund = COVERM_GENOME_HQ_DEREP.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
+                ch_versions = ch_versions.mix(COVERM_GENOME_HQ_DEREP.out.versions)
             }
         }
 

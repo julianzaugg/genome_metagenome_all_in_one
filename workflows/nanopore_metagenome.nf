@@ -15,7 +15,7 @@ include { MYLOASM }                     from '../modules/local/assembly_isolate'
 include { DORADO_POLISH }               from '../modules/local/long_reads'
 include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict/main'
 include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
-include { COVERM_CLUSTER; COVERM_GENOME as COVERM_GENOME_ONT; COVERM_GENOME as COVERM_GENOME_HQ_ONT; COVERM_CONTIG as COVERM_CONTIG_ONT } from '../modules/local/coverm'
+include { COVERM_CLUSTER; COVERM_CLUSTER_HQ; COVERM_GENOME as COVERM_GENOME_ONT; COVERM_GENOME as COVERM_GENOME_HQ_ONT; COVERM_GENOME as COVERM_GENOME_HQ_DEREP_ONT; COVERM_CONTIG as COVERM_CONTIG_ONT } from '../modules/local/coverm'
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
@@ -151,6 +151,11 @@ workflow NANOPORE_METAGENOME {
                                 .map { f -> [ [id: f.baseName], f ] }
             ch_hq_reps   = COVERM_CLUSTER.out.hq_representatives.collect().ifEmpty([])
             ch_versions = ch_versions.mix(COVERM_CLUSTER.out.versions)
+
+            // HQ-first: extract HQ MAGs from the FULL bin set, THEN dereplicate them
+            COVERM_CLUSTER_HQ(ch_all_bins, ch_checkm2_tsv, ch_checkm1_tsv)
+            ch_hq_derep_reps = COVERM_CLUSTER_HQ.out.representatives.collect().ifEmpty([])
+            ch_versions = ch_versions.mix(COVERM_CLUSTER_HQ.out.versions)
         } else {
             ch_reps    = ch_all_bins
             ch_per_rep = AVIARY_COLLECT_BINS.out.bins.flatten().map { b -> [ [id: b.baseName], b ] }
@@ -167,6 +172,11 @@ workflow NANOPORE_METAGENOME {
                 COVERM_GENOME_HQ_ONT(ch_clean, ch_hq_reps)
                 ch_hq_repmag_abund = COVERM_GENOME_HQ_ONT.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
                 ch_versions = ch_versions.mix(COVERM_GENOME_HQ_ONT.out.versions)
+
+                // Map the same reads to the HQ-first-then-dereplicated set
+                COVERM_GENOME_HQ_DEREP_ONT(ch_clean, ch_hq_derep_reps)
+                ch_hq_derep_abund = COVERM_GENOME_HQ_DEREP_ONT.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
+                ch_versions = ch_versions.mix(COVERM_GENOME_HQ_DEREP_ONT.out.versions)
             }
         }
 

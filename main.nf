@@ -37,6 +37,14 @@ workflow {
     if (params.validate_params) {
         validateParameters()
     }
+
+    // HQ classification source must have a CheckM report available to read from.
+    if (params.hq_quality_source == 'checkm1' && !params.run_checkm1) {
+        error "hq_quality_source='checkm1' requires run_checkm1=true (CheckM1 is not being run)."
+    }
+    if (params.hq_quality_source == 'checkm2' && params.skip_checkm) {
+        error "hq_quality_source='checkm2' requires skip_checkm=false (CheckM2 is not being run)."
+    }
     log.info paramsSummaryLog(workflow)
 
     // --- Route ---

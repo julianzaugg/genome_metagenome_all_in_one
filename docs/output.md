@@ -15,8 +15,10 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 06_aviary/              # Aviary recovery; all_aviary_bins/ is the renamed canonical bin set
 07_checkm2/             # CheckM2 on all bins (drives dereplication + HQ selection)
 08_dereplicated_bins/   # CoverM cluster: representatives/ + high_quality_representatives/ + cluster_definition.tsv
+08_dereplicated_hq_bins/ # CoverM cluster on HQ-first bins: HQ MAGs extracted from the FULL bin set, THEN dereplicated
 09_coverm_bins/         # per-sample abundance vs all dereplicated representatives
 09_coverm_hq_bins/      # per-sample abundance vs high_quality_representatives/ only (no competing siblings)
+09_coverm_hq_derep_bins/ # per-sample abundance vs the HQ-first-then-dereplicated set (08_dereplicated_hq_bins)
 10_coverm_scaffolds/    # per-sample coverage/counts vs assembled scaffolds
 11_pyrodigal/           # predicted proteins/genes per assembly
 12_gene_catalogue/      # cd-hit catalogue(s) + nucleotide CDS + membership (provenance)
@@ -68,6 +70,16 @@ shape depends on the mode:
   HQ rep, competitive mapping in the full-set run splits reads across those
   siblings and the subset count undercounts — the direct mapping doesn't have
   that problem.
+
+  `09_coverm_hq_derep_bins/` is a third HQ mapping against a **differently
+  constructed** set (`08_dereplicated_hq_bins/`). The `_HQ_Rep_MAGs*` sets above
+  dereplicate the full bin set first and then keep the representatives that pass
+  the HQ filter, so a cluster whose chosen representative isn't HQ contributes no
+  HQ MAG. `08_dereplicated_hq_bins/` reverses the order — HQ MAGs are extracted
+  from the FULL pre-dereplication bin set first, then those are dereplicated — so
+  every HQ cluster is represented by an HQ genome. Which CheckM report(s) decide
+  "HQ" is controlled by `--hq_quality_source` (`both` (default) | `checkm1` |
+  `checkm2`; a bin is HQ if it passes in any selected report).
 - **Isolate**: same QC-stage columns, then CoverM mapping stats against the
   sample's own assembly — `Covered_fraction, Mean_coverage, Read_count,
   Read_count_percent` (with `_SR` variants when a hybrid nanopore isolate also
@@ -90,6 +102,7 @@ read QC and assembly directories:
 07_myloasm/
 09_coverm_bins/         # minimap2-ont, 90% identity
 09_coverm_hq_bins/      # minimap2-ont, 90% identity, HQ representatives only
+09_coverm_hq_derep_bins/ # minimap2-ont, HQ-first-then-dereplicated set
 10_coverm_scaffolds_nanopore/
 ```
 

@@ -107,6 +107,7 @@
                 "run_barrnap":          { "type": "boolean", "default": true },
                 "run_dram_bins":        { "type": "boolean", "default": false },
                 "run_checkm1":          { "type": "boolean", "default": true },
+                "hq_quality_source":    { "type": "string", "enum": ["both", "checkm1", "checkm2"], "default": "both", "description": "Which CheckM report(s) classify a bin as HQ; a bin is HQ if it passes in any selected report." },
                 "run_fastani":          { "type": "boolean", "default": true },
                 "run_parsnp":           { "type": "boolean", "default": true },
                 "run_panaroo":          { "type": "boolean", "default": true },
