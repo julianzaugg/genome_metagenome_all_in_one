@@ -166,6 +166,7 @@ workflow NANOPORE_ISOLATE {
         ch_scaffold_sr,
         [],
         [],
+        [],
         []
     )
     ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)

@@ -88,6 +88,7 @@ workflow NANOPORE_METAGENOME {
     ch_repmag_abund    = Channel.value([])
     ch_hq_reps         = Channel.value([])
     ch_hq_repmag_abund = Channel.value([])
+    ch_hq_derep_abund  = Channel.value([])
 
     ch_assembly = Channel.empty()
     if (!params.skip_assembly) {
@@ -240,7 +241,8 @@ workflow NANOPORE_METAGENOME {
         [],
         ch_repmag_abund,
         ch_hq_reps,
-        ch_hq_repmag_abund
+        ch_hq_repmag_abund,
+        ch_hq_derep_abund
     )
     ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)
 
