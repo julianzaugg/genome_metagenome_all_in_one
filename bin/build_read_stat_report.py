@@ -16,13 +16,15 @@ Rules:
   - Paired reads are counted forward + reverse (SeqKit runs on both files,
     one row per file, so summing num_seqs over rows gives the combined total).
   - Stage columns are labelled by the tool that produced them.
+  - "Dereplicated_Bins" is the full set of dereplicated cluster representatives
+    (any quality); "MAGs" is reserved for the high-quality subset.
   - HQ MAGs get two distinct counts, because they differ when dereplication
     leaves redundant near-identical lower-quality bins alongside an HQ rep:
     competitive mapping against the full rep set then splits reads across
     those siblings, undercounting the HQ rep specifically.
-      * Reads_mapped_HQ_Rep_MAGs_count        — subset of --repmag-dir's full-set
+      * Reads_mapped_HQ_MAGs_count        — subset of --repmag-dir's full-set
         mapping, summed over rows matching an --hq-dir basename.
-      * Reads_mapped_HQ_Rep_MAGs_direct_count — a separate --hq-repmag-dir
+      * Reads_mapped_HQ_MAGs_direct_count — a separate --hq-repmag-dir
         mapping run against the HQ MAGs only, no competing siblings.
   - Reads_mapped_HQ_Derep_MAGs_count is a third HQ mapping (--hq-derep-repmag-dir)
     against a differently constructed set: HQ MAGs extracted from the FULL
@@ -31,7 +33,7 @@ Rules:
 
 Two report shapes:
   metagenome  Sample_ID, GBbp, Raw_count, <stage>_count/percent...,
-              Reads_mapped_{Scaffolds,Rep_MAGs,HQ_Rep_MAGs,HQ_Rep_MAGs_direct,HQ_Derep_MAGs}_count/percent
+              Reads_mapped_{Scaffolds,Dereplicated_Bins,HQ_MAGs,HQ_MAGs_direct,HQ_Derep_MAGs}_count/percent
   isolate     Sample_ID, GBbp, Raw_count, <stage>_count/percent...,
               Covered_fraction, Mean_coverage, Read_count, Read_count_percent
               (+ _SR variants when a short-read mapping is present)
@@ -206,11 +208,11 @@ def build(mode, seqkit, scaffold, scaffold_sr, repmag, hq_names, has_hq,
         if scaffold:
             header += ["Reads_mapped_Scaffolds_count", "Reads_mapped_Scaffolds_percent"]
         if repmag:
-            header += ["Reads_mapped_Rep_MAGs_count", "Reads_mapped_Rep_MAGs_percent"]
+            header += ["Reads_mapped_Dereplicated_Bins_count", "Reads_mapped_Dereplicated_Bins_percent"]
             if has_hq:
-                header += ["Reads_mapped_HQ_Rep_MAGs_count", "Reads_mapped_HQ_Rep_MAGs_percent"]
+                header += ["Reads_mapped_HQ_MAGs_count", "Reads_mapped_HQ_MAGs_percent"]
         if repmag_direct:
-            header += ["Reads_mapped_HQ_Rep_MAGs_direct_count", "Reads_mapped_HQ_Rep_MAGs_direct_percent"]
+            header += ["Reads_mapped_HQ_MAGs_direct_count", "Reads_mapped_HQ_MAGs_direct_percent"]
         if repmag_hq_derep:
             header += ["Reads_mapped_HQ_Derep_MAGs_count", "Reads_mapped_HQ_Derep_MAGs_percent"]
     else:  # isolate

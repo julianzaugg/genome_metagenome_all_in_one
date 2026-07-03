@@ -60,21 +60,23 @@ shape depends on the mode:
 
 - **Metagenome**: `Sample_ID, GBbp, Raw_count`, then a `<Tool>_count`/`<Tool>_percent`
   pair per QC stage (Fastp / Porechop / Fastplong / Cleanifier — whichever ran),
-  then `Reads_mapped_Scaffolds`, `Reads_mapped_Rep_MAGs`,
-  `Reads_mapped_HQ_Rep_MAGs`, `Reads_mapped_HQ_Rep_MAGs_direct`, and
+  then `Reads_mapped_Scaffolds`, `Reads_mapped_Dereplicated_Bins`,
+  `Reads_mapped_HQ_MAGs`, `Reads_mapped_HQ_MAGs_direct`, and
   `Reads_mapped_HQ_Derep_MAGs` count/percent (from the CoverM `Count` method).
-  The HQ columns can differ: `_HQ_Rep_MAGs` is the subset of the full
-  `09_coverm_bins/` mapping whose genome matches `high_quality_representatives/`,
-  while `_HQ_Rep_MAGs_direct` comes from a separate `09_coverm_hq_bins/` mapping
-  against the HQ MAGs only. When dereplication leaves redundant near-identical
-  lower-quality bins alongside an HQ rep, competitive mapping in the full-set run
-  splits reads across those siblings and the subset count undercounts — the
-  direct mapping doesn't have that problem. `_HQ_Derep_MAGs` is the
-  `09_coverm_hq_derep_bins/` mapping against the HQ-first-then-dereplicated set
-  (`08_dereplicated_hq_bins/`; see below).
+  `Dereplicated_Bins` is the full set of cluster representatives of any quality;
+  `MAGs` is reserved for the high-quality subset. The HQ columns can differ:
+  `_HQ_MAGs` is the subset of the full `09_coverm_bins/` mapping whose genome
+  matches `high_quality_representatives/`, while `_HQ_MAGs_direct` comes from a
+  separate `09_coverm_hq_bins/` mapping against the HQ MAGs only. When
+  dereplication leaves redundant near-identical lower-quality bins alongside an
+  HQ rep, competitive mapping in the full-set run splits reads across those
+  siblings and the subset count undercounts — the direct mapping doesn't have
+  that problem. `_HQ_Derep_MAGs` is the `09_coverm_hq_derep_bins/` mapping
+  against the HQ-first-then-dereplicated set (`08_dereplicated_hq_bins/`; see
+  below).
 
   `09_coverm_hq_derep_bins/` is a third HQ mapping against a **differently
-  constructed** set (`08_dereplicated_hq_bins/`). The `_HQ_Rep_MAGs*` sets above
+  constructed** set (`08_dereplicated_hq_bins/`). The `_HQ_MAGs*` sets above
   dereplicate the full bin set first and then keep the representatives that pass
   the HQ filter, so a cluster whose chosen representative isn't HQ contributes no
   HQ MAG. `08_dereplicated_hq_bins/` reverses the order — HQ MAGs are extracted
