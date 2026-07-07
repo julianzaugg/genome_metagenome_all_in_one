@@ -18,6 +18,7 @@
 include { INPUT_CHECK }        from '../subworkflows/local/input_check'
 include { READ_PROFILING }     from '../subworkflows/local/read_profiling'
 include { HOST_REMOVAL }       from '../subworkflows/local/host_removal'
+include { REFERENCE_GENOMES }  from '../subworkflows/local/reference_genomes'
 include { GENE_CATALOGUE }     from '../subworkflows/local/gene_catalogue'
 include { GENOME_TAXONOMY_QC } from '../subworkflows/local/genome_taxonomy_qc'
 include { MARKER_GENE_TREE }   from '../subworkflows/local/marker_gene_tree'
@@ -29,7 +30,7 @@ include { SPADES }                      from '../modules/nf-core/spades/main'
 include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict/main'
 include { PREP_ASSEMBLY }               from '../modules/local/util'
 include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
-include { COVERM_CLUSTER; COVERM_CLUSTER_HQ; COVERM_GENOME; COVERM_GENOME as COVERM_GENOME_HQ; COVERM_GENOME as COVERM_GENOME_HQ_DEREP; COVERM_CONTIG } from '../modules/local/coverm'
+include { COVERM_CLUSTER; COVERM_CLUSTER_HQ; COVERM_CLUSTER_HQ_REF; COVERM_GENOME; COVERM_GENOME as COVERM_GENOME_HQ; COVERM_GENOME as COVERM_GENOME_HQ_DEREP; COVERM_GENOME as COVERM_GENOME_HQ_REF; COVERM_CONTIG } from '../modules/local/coverm'
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
@@ -50,6 +51,14 @@ workflow ILLUMINA_METAGENOME {
     }
     if (!params.skip_rpkm && (params.skip_assembly || params.skip_gene_catalogue)) {
         error "RPKM requires assembly and the gene catalogue. Rerun with --skip_assembly false --skip_gene_catalogue false, or set --skip_rpkm true."
+    }
+    if (params.reference_genomes) {
+        if (params.skip_binning || params.skip_dereplication) {
+            error "--reference_genomes dereplicates the references with the HQ MAGs, which needs binning + dereplication. Rerun with --skip_binning false --skip_dereplication false, or unset --reference_genomes."
+        }
+        if (params.skip_checkm) {
+            error "--reference_genomes selects cluster representatives by CheckM2 quality, so CheckM2 is required. Rerun with --skip_checkm false, or unset --reference_genomes."
+        }
     }
 
     INPUT_CHECK(params.input, params.mode)
@@ -114,6 +123,21 @@ workflow ILLUMINA_METAGENOME {
     ch_hq_reps         = Channel.value([])
     ch_hq_repmag_abund = Channel.value([])
     ch_hq_derep_abund  = Channel.value([])
+    ch_hq_ref_abund    = Channel.value([])
+
+    // --- External reference genomes (normalise + CheckM2 + protein prediction) ---
+    if (params.reference_genomes) {
+        ch_reference_files = Channel
+            .fromPath("${params.reference_genomes}/*.{${params.reference_genome_extension}}", checkIfExists: true)
+            .collect()
+        REFERENCE_GENOMES(
+            ch_reference_files,
+            optpath(params.reference_genomes_checkm2),
+            file(params.checkm2_db, checkIfExists: true),
+            params.reference_genomes_checkm2 == null
+        )
+        ch_versions = ch_versions.mix(REFERENCE_GENOMES.out.versions)
+    }
 
     // --- Assembly (metaSPAdes) ---
     ch_assembly = Channel.empty()
@@ -183,6 +207,15 @@ workflow ILLUMINA_METAGENOME {
             COVERM_CLUSTER_HQ(ch_all_bins, ch_checkm2_tsv, ch_checkm1_tsv)
             ch_hq_derep_reps = COVERM_CLUSTER_HQ.out.representatives.collect().ifEmpty([])
             ch_versions = ch_versions.mix(COVERM_CLUSTER_HQ.out.versions)
+
+            // HQ-first + external reference genomes: dereplicate the HQ MAGs together with
+            // the references (references always included; representatives chosen by CheckM2).
+            if (params.reference_genomes) {
+                COVERM_CLUSTER_HQ_REF(ch_all_bins, REFERENCE_GENOMES.out.genomes,
+                                      ch_checkm2_tsv, ch_checkm1_tsv, REFERENCE_GENOMES.out.checkm2)
+                ch_hq_ref_derep_reps = COVERM_CLUSTER_HQ_REF.out.representatives.collect().ifEmpty([])
+                ch_versions = ch_versions.mix(COVERM_CLUSTER_HQ_REF.out.versions)
+            }
         } else {
             ch_reps    = ch_all_bins
             ch_per_rep = AVIARY_COLLECT_BINS.out.bins.flatten().map { b -> [ [id: b.baseName], b ] }
@@ -206,6 +239,13 @@ workflow ILLUMINA_METAGENOME {
                 COVERM_GENOME_HQ_DEREP(ch_clean, ch_hq_derep_reps)
                 ch_hq_derep_abund = COVERM_GENOME_HQ_DEREP.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
                 ch_versions = ch_versions.mix(COVERM_GENOME_HQ_DEREP.out.versions)
+
+                // Map the same reads to the (HQ MAGs + reference genomes) dereplicated set
+                if (params.reference_genomes) {
+                    COVERM_GENOME_HQ_REF(ch_clean, ch_hq_ref_derep_reps)
+                    ch_hq_ref_abund = COVERM_GENOME_HQ_REF.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
+                    ch_versions = ch_versions.mix(COVERM_GENOME_HQ_REF.out.versions)
+                }
             }
         }
 
@@ -242,7 +282,10 @@ workflow ILLUMINA_METAGENOME {
             PYRODIGAL_SCAFFOLDS.out.fna,
             params.catalogue_identities,
             optpath(params.dram_db),
-            !params.skip_annotation
+            !params.skip_annotation,
+            params.reference_genomes ? REFERENCE_GENOMES.out.faa : Channel.empty(),
+            params.reference_genomes ? REFERENCE_GENOMES.out.fna : Channel.empty(),
+            params.reference_genomes as boolean
         )
         ch_versions = ch_versions
             .mix(PYRODIGAL_SCAFFOLDS.out.versions)
@@ -258,7 +301,8 @@ workflow ILLUMINA_METAGENOME {
             file(params.singlem_metapackage, checkIfExists: true),
             optpath(params.rpkm_singlem_marker_dbs),
             optpath(params.rpkm_singlem_marker_lengths),
-            params.rpkm_min_read_length
+            params.rpkm_min_read_length,
+            params.reference_genomes ? GENE_CATALOGUE.out.expanded_catalogue : []
         )
         ch_versions = ch_versions.mix(RPKM.out.versions)
     }
@@ -288,7 +332,8 @@ workflow ILLUMINA_METAGENOME {
         ch_repmag_abund,
         ch_hq_reps,
         ch_hq_repmag_abund,
-        ch_hq_derep_abund
+        ch_hq_derep_abund,
+        ch_hq_ref_abund
     )
     ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)
 

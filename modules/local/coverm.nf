@@ -160,6 +160,118 @@ process COVERM_CLUSTER_HQ {
     """
 }
 
+/*
+ * HQ-first dereplication WITH external reference genomes.
+ * Like COVERM_CLUSTER_HQ (filter the full bin set to HQ MAGs, then cluster), but the
+ * supplied reference genomes are added to the clustering pool UNCONDITIONALLY (they
+ * bypass the HQ filter — always included). Representative selection is quality-driven
+ * across MAGs and refs via a combined CheckM2 report (MAG report + reference report).
+ * representatives = the dereplicated (HQ MAGs + references) set.
+ */
+process COVERM_CLUSTER_HQ_REF {
+    label 'process_high'
+
+    input:
+    path(bins, stageAs: 'bins/*')
+    path(refs, stageAs: 'refs/*')
+    path(checkm2_report)      // [] if CheckM2 skipped
+    path(checkm1_report)      // [] if CheckM1 skipped
+    path(ref_checkm2_report)  // CheckM2 report for the reference genomes
+
+    output:
+    path 'representatives/*.fasta', emit: representatives, optional: true
+    path 'cluster_definition.tsv',  emit: clusters
+    path 'versions.yml',            emit: versions
+
+    script:
+    def args      = task.ext.args ?: '--precluster-method finch --ani 0.95'
+    def quality   = task.ext.quality ?: 50   // completeness - weight*contamination >= quality
+    def weight    = task.ext.weight  ?: 3
+    def hq_source = task.ext.hq_source ?: 'both'   // classify HQ by checkm1, checkm2, or both
+    """
+    # Identify HQ bins first: completeness - ${weight}*contamination >= ${quality} in the
+    # selected CheckM report(s) (${hq_source}). Column indices found by header name.
+    : > hq_ids.txt
+    pass_ids() {
+        [ -s "\$1" ] || return
+        awk -F '\\t' -v q=${quality} -v k=${weight} '
+            NR==1 { for(i=1;i<=NF;i++){ if(\$i=="Completeness")cc=i; if(\$i=="Contamination")ct=i;
+                                        if(\$i=="Name"||\$i=="Bin Id"||\$i=="genome")id=i } next }
+            (cc && ct && id && (\$cc - k*\$ct) >= q) { print \$id }
+        ' "\$1" >> hq_ids.txt
+    }
+    case "${hq_source}" in
+        both)    pass_ids "${checkm2_report}"; pass_ids "${checkm1_report}" ;;
+        checkm2) pass_ids "${checkm2_report}" ;;
+        checkm1) pass_ids "${checkm1_report}" ;;
+    esac
+
+    # Stage the HQ bins for clustering.
+    mkdir -p hq_bins
+    sort -u hq_ids.txt | while read -r bin_id; do
+        [ -n "\$bin_id" ] && [ -f "bins/\${bin_id}.fasta" ] && cp "bins/\${bin_id}.fasta" hq_bins/
+    done
+
+    # Add all reference genomes unconditionally. Fail loudly on a name clash with a bin
+    # (would make both the staged FASTA and the combined CheckM2 report ambiguous).
+    for r in refs/*.fasta; do
+        [ -e "\$r" ] || continue
+        rb=\$(basename "\$r")
+        if [ -f "bins/\$rb" ]; then
+            echo "[COVERM_CLUSTER_HQ_REF] Reference genome '\$rb' collides with a bin of the same name. Rename the reference genome." >&2
+            exit 1
+        fi
+        cp "\$r" hq_bins/
+    done
+    echo -e "representative\\tmember" > cluster_definition.tsv
+
+    # Combined CheckM2 report for representative selection = MAG report + reference report
+    # (single header). References were scored with CheckM2 upstream.
+    : > combined_checkm2.tsv
+    if [ -s "${checkm2_report}" ]; then cat "${checkm2_report}" > combined_checkm2.tsv; fi
+    if [ -s "${ref_checkm2_report}" ]; then
+        if [ -s combined_checkm2.tsv ]; then
+            tail -n +2 "${ref_checkm2_report}" >> combined_checkm2.tsv
+        else
+            cat "${ref_checkm2_report}" > combined_checkm2.tsv
+        fi
+    fi
+
+    qcflag=""
+    if [ -s combined_checkm2.tsv ]; then
+        qcflag="--checkm2-quality-report combined_checkm2.tsv"
+    elif [ -s "${checkm1_report}" ]; then
+        qcflag="--checkm-tab-table ${checkm1_report}"
+    fi
+
+    # No genomes staged (no HQ bins and no refs) -> leave representatives empty (emit optional).
+    if ls hq_bins/*.fasta >/dev/null 2>&1; then
+        coverm cluster ${args} \\
+            -t ${task.cpus} \\
+            --genome-fasta-directory hq_bins \\
+            --genome-fasta-extension fasta \\
+            --output-representative-fasta-directory representatives \\
+            --output-cluster-definition cluster_definition.tsv \\
+            \$qcflag
+    fi
+
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        coverm: \$(coverm --version 2>&1 | sed 's/coverm //')
+    END_VERSIONS
+    """
+
+    stub:
+    """
+    mkdir -p representatives
+    cp bins/* representatives/ 2>/dev/null || true
+    cp refs/* representatives/ 2>/dev/null || true
+    ls representatives/*.fasta >/dev/null 2>&1 || (echo ">c" > representatives/rep.1.fasta; echo "ACGT" >> representatives/rep.1.fasta)
+    echo -e "representative\\tmember" > cluster_definition.tsv
+    echo '"${task.process}": {coverm: stub}' > versions.yml
+    """
+}
+
 process COVERM_GENOME {
     tag   { meta.id }
     label 'process_high'
@@ -170,6 +282,7 @@ process COVERM_GENOME {
 
     output:
     tuple val(meta), path("${meta.id}_abundances.tsv"), emit: abundance
+    tuple val(meta), path("*.bam"), optional: true,     emit: bams
     path 'versions.yml',                                emit: versions
 
     script:

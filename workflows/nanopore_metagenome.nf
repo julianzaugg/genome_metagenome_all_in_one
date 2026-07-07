@@ -6,6 +6,7 @@ include { INPUT_CHECK }        from '../subworkflows/local/input_check'
 include { LONG_READ_QC }       from '../subworkflows/local/long_read_qc'
 include { READ_PROFILING }     from '../subworkflows/local/read_profiling'
 include { HOST_REMOVAL }       from '../subworkflows/local/host_removal'
+include { REFERENCE_GENOMES }  from '../subworkflows/local/reference_genomes'
 include { GENE_CATALOGUE }     from '../subworkflows/local/gene_catalogue'
 include { GENOME_TAXONOMY_QC } from '../subworkflows/local/genome_taxonomy_qc'
 include { MARKER_GENE_TREE }   from '../subworkflows/local/marker_gene_tree'
@@ -15,7 +16,7 @@ include { MYLOASM }                     from '../modules/local/assembly_isolate'
 include { DORADO_POLISH }               from '../modules/local/long_reads'
 include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict/main'
 include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
-include { COVERM_CLUSTER; COVERM_CLUSTER_HQ; COVERM_GENOME as COVERM_GENOME_ONT; COVERM_GENOME as COVERM_GENOME_HQ_ONT; COVERM_GENOME as COVERM_GENOME_HQ_DEREP_ONT; COVERM_CONTIG as COVERM_CONTIG_ONT } from '../modules/local/coverm'
+include { COVERM_CLUSTER; COVERM_CLUSTER_HQ; COVERM_CLUSTER_HQ_REF; COVERM_GENOME as COVERM_GENOME_ONT; COVERM_GENOME as COVERM_GENOME_HQ_ONT; COVERM_GENOME as COVERM_GENOME_HQ_DEREP_ONT; COVERM_GENOME as COVERM_GENOME_HQ_REF_ONT; COVERM_CONTIG as COVERM_CONTIG_ONT } from '../modules/local/coverm'
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
@@ -28,6 +29,14 @@ def optpath = { p -> p ? file(p, checkIfExists: true) : [] }
 workflow NANOPORE_METAGENOME {
 
     if (!params.input) { error "Mode 'nanopore_metagenome' requires --input <samplesheet.csv>" }
+    if (params.reference_genomes) {
+        if (params.skip_binning || params.skip_dereplication) {
+            error "--reference_genomes dereplicates the references with the HQ MAGs, which needs binning + dereplication. Rerun with --skip_binning false --skip_dereplication false, or unset --reference_genomes."
+        }
+        if (params.skip_checkm) {
+            error "--reference_genomes selects cluster representatives by CheckM2 quality, so CheckM2 is required. Rerun with --skip_checkm false, or unset --reference_genomes."
+        }
+    }
 
     INPUT_CHECK(params.input, params.mode)
 
@@ -89,6 +98,21 @@ workflow NANOPORE_METAGENOME {
     ch_hq_reps         = Channel.value([])
     ch_hq_repmag_abund = Channel.value([])
     ch_hq_derep_abund  = Channel.value([])
+    ch_hq_ref_abund    = Channel.value([])
+
+    // --- External reference genomes (normalise + CheckM2 + protein prediction) ---
+    if (params.reference_genomes) {
+        ch_reference_files = Channel
+            .fromPath("${params.reference_genomes}/*.{${params.reference_genome_extension}}", checkIfExists: true)
+            .collect()
+        REFERENCE_GENOMES(
+            ch_reference_files,
+            optpath(params.reference_genomes_checkm2),
+            file(params.checkm2_db, checkIfExists: true),
+            params.reference_genomes_checkm2 == null
+        )
+        ch_versions = ch_versions.mix(REFERENCE_GENOMES.out.versions)
+    }
 
     ch_assembly = Channel.empty()
     if (!params.skip_assembly) {
@@ -157,6 +181,15 @@ workflow NANOPORE_METAGENOME {
             COVERM_CLUSTER_HQ(ch_all_bins, ch_checkm2_tsv, ch_checkm1_tsv)
             ch_hq_derep_reps = COVERM_CLUSTER_HQ.out.representatives.collect().ifEmpty([])
             ch_versions = ch_versions.mix(COVERM_CLUSTER_HQ.out.versions)
+
+            // HQ-first + external reference genomes (references always included;
+            // representatives chosen by CheckM2). See illumina_metagenome.nf.
+            if (params.reference_genomes) {
+                COVERM_CLUSTER_HQ_REF(ch_all_bins, REFERENCE_GENOMES.out.genomes,
+                                      ch_checkm2_tsv, ch_checkm1_tsv, REFERENCE_GENOMES.out.checkm2)
+                ch_hq_ref_derep_reps = COVERM_CLUSTER_HQ_REF.out.representatives.collect().ifEmpty([])
+                ch_versions = ch_versions.mix(COVERM_CLUSTER_HQ_REF.out.versions)
+            }
         } else {
             ch_reps    = ch_all_bins
             ch_per_rep = AVIARY_COLLECT_BINS.out.bins.flatten().map { b -> [ [id: b.baseName], b ] }
@@ -178,6 +211,13 @@ workflow NANOPORE_METAGENOME {
                 COVERM_GENOME_HQ_DEREP_ONT(ch_clean, ch_hq_derep_reps)
                 ch_hq_derep_abund = COVERM_GENOME_HQ_DEREP_ONT.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
                 ch_versions = ch_versions.mix(COVERM_GENOME_HQ_DEREP_ONT.out.versions)
+
+                // Map the same reads to the (HQ MAGs + reference genomes) dereplicated set
+                if (params.reference_genomes) {
+                    COVERM_GENOME_HQ_REF_ONT(ch_clean, ch_hq_ref_derep_reps)
+                    ch_hq_ref_abund = COVERM_GENOME_HQ_REF_ONT.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
+                    ch_versions = ch_versions.mix(COVERM_GENOME_HQ_REF_ONT.out.versions)
+                }
             }
         }
 
@@ -212,7 +252,10 @@ workflow NANOPORE_METAGENOME {
             PYRODIGAL_SCAFFOLDS.out.fna,
             params.catalogue_identities,
             optpath(params.dram_db),
-            !params.skip_annotation
+            !params.skip_annotation,
+            params.reference_genomes ? REFERENCE_GENOMES.out.faa : Channel.empty(),
+            params.reference_genomes ? REFERENCE_GENOMES.out.fna : Channel.empty(),
+            params.reference_genomes as boolean
         )
         ch_versions = ch_versions
             .mix(PYRODIGAL_SCAFFOLDS.out.versions)
@@ -242,7 +285,8 @@ workflow NANOPORE_METAGENOME {
         ch_repmag_abund,
         ch_hq_reps,
         ch_hq_repmag_abund,
-        ch_hq_derep_abund
+        ch_hq_derep_abund,
+        ch_hq_ref_abund
     )
     ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)
 

@@ -76,6 +76,9 @@
                 "cleanifier_nobjects": { "type": "integer", "description": "Optional -n/--nobjects override for cleanifier index; defaults to estimated FASTA bases." },
                 "genomespot_models":   { "type": "string", "description": "GenomeSPOT models directory." },
                 "bakta_reference_proteins": { "type": "string", "description": "Optional proteins/GBFF file passed to Bakta --proteins." },
+                "reference_genomes":   { "type": "string", "format": "directory-path", "description": "Directory of external reference genome FASTAs (metagenome modes). When set, references are dereplicated together with the HQ MAGs, reads are mapped to that combined set, and reference proteins are added to an expanded gene catalogue (+DRAM+RPKM)." },
+                "reference_genome_extension": { "type": "string", "default": "fasta,fa,fna,fasta.gz,fa.gz,fna.gz", "description": "Comma-separated file extensions to glob under reference_genomes (gzipped inputs are decompressed)." },
+                "reference_genomes_checkm2": { "type": "string", "format": "file-path", "description": "Optional CheckM2 quality_report.tsv for the reference genomes; every reference must appear in it or the run fails. If unset, CheckM2 is run on the references." },
                 "download_db":         { "type": "string", "description": "Comma-list of DB names or 'all' (only with --mode download_dbs)." },
                 "db_outdir":           { "type": "string", "default": "databases", "description": "Where --mode download_dbs writes." }
             }
