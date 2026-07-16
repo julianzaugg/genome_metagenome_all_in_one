@@ -31,6 +31,7 @@ include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict
 include { PREP_ASSEMBLY }               from '../modules/local/util'
 include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
 include { COVERM_CLUSTER; COVERM_CLUSTER_HQ; COVERM_CLUSTER_HQ_REF; COVERM_GENOME; COVERM_GENOME as COVERM_GENOME_HQ; COVERM_GENOME as COVERM_GENOME_HQ_DEREP; COVERM_GENOME as COVERM_GENOME_HQ_REF; COVERM_CONTIG } from '../modules/local/coverm'
+include { COVERM_CLUSTER_WS; COVERM_CLUSTER_HQ_WS; COVERM_GENOME_PAIRED as COVERM_GENOME_WS_DEREP; COVERM_GENOME_PAIRED as COVERM_GENOME_WS_HQ } from '../modules/local/coverm'
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
@@ -58,6 +59,14 @@ workflow ILLUMINA_METAGENOME {
         }
         if (params.skip_checkm) {
             error "--reference_genomes selects cluster representatives by CheckM2 quality, so CheckM2 is required. Rerun with --skip_checkm false, or unset --reference_genomes."
+        }
+    }
+    if (params.within_sample_dereplication != 'none') {
+        if (params.skip_binning) {
+            error "--within_sample_dereplication needs binning. Rerun with --skip_binning false, or set --within_sample_dereplication none."
+        }
+        if (params.skip_checkm && !params.run_checkm1) {
+            log.warn "within_sample_dereplication: no CheckM report (skip_checkm true, run_checkm1 false) -> within-sample HQ MAG selection will be empty."
         }
     }
 
@@ -124,6 +133,8 @@ workflow ILLUMINA_METAGENOME {
     ch_hq_repmag_abund = Channel.value([])
     ch_hq_derep_abund  = Channel.value([])
     ch_hq_ref_abund    = Channel.value([])
+    ch_ws_derep_abund  = Channel.value([])
+    ch_ws_hq_abund     = Channel.value([])
 
     // --- External reference genomes (normalise + CheckM2 + protein prediction) ---
     if (params.reference_genomes) {
@@ -192,6 +203,40 @@ workflow ILLUMINA_METAGENOME {
             CHECKM1_LINEAGEWF(ch_all_bins)
             ch_checkm1_tsv = CHECKM1_LINEAGEWF.out.summary
             ch_versions = ch_versions.mix(CHECKM1_LINEAGEWF.out.versions)
+        }
+
+        // --- Within-sample / within-group dereplication (independent of the cross-sample
+        // path above; reuses the pooled CheckM reports — only each unit's bins are clustered) ---
+        if (params.within_sample_dereplication != 'none') {
+            def ck2 = ch_checkm2_tsv.first()   // broadcast the single-emission CheckM reports
+            def ck1 = ch_checkm1_tsv.first()
+
+            // grouping unit -> [meta, bins]; 'sample' keeps FULL meta (needed for the read join)
+            ch_ws_bins = params.within_sample_dereplication == 'group'
+                ? AVIARY_RECOVER.out.bins.map { meta, bins -> [ meta.group, bins ] }
+                      .groupTuple().map { g, bl -> [ [id: g], bl.flatten() ] }
+                : AVIARY_RECOVER.out.bins
+
+            COVERM_CLUSTER_WS(ch_ws_bins, ck2, ck1)
+            COVERM_CLUSTER_HQ_WS(ch_ws_bins, ck2, ck1)
+            ch_versions = ch_versions.mix(COVERM_CLUSTER_WS.out.versions, COVERM_CLUSTER_HQ_WS.out.versions)
+
+            // each sample maps ITS reads to its own unit's reps
+            def joinReps = { repsCh ->
+                params.within_sample_dereplication == 'group'
+                    ? ch_clean.map { meta, reads -> [ meta.group, meta, reads ] }
+                          .combine(repsCh.map { m, r -> [ m.id, r ] }, by: 0)
+                          .map { grp, meta, reads, r -> [ meta, reads, r ] }
+                    : ch_clean.join(repsCh)   // [meta, reads, reps]
+            }
+
+            if (!params.skip_read_mapping) {
+                COVERM_GENOME_WS_DEREP(joinReps(COVERM_CLUSTER_WS.out.representatives))
+                COVERM_GENOME_WS_HQ(joinReps(COVERM_CLUSTER_HQ_WS.out.representatives))
+                ch_ws_derep_abund = COVERM_GENOME_WS_DEREP.out.abundance.map { m, t -> t }.collect().ifEmpty([])
+                ch_ws_hq_abund    = COVERM_GENOME_WS_HQ.out.abundance.map { m, t -> t }.collect().ifEmpty([])
+                ch_versions = ch_versions.mix(COVERM_GENOME_WS_DEREP.out.versions, COVERM_GENOME_WS_HQ.out.versions)
+            }
         }
 
         // --- Dereplication ---
@@ -333,7 +378,9 @@ workflow ILLUMINA_METAGENOME {
         ch_hq_reps,
         ch_hq_repmag_abund,
         ch_hq_derep_abund,
-        ch_hq_ref_abund
+        ch_hq_ref_abund,
+        ch_ws_derep_abund,
+        ch_ws_hq_abund
     )
     ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)
 

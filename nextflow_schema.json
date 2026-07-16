@@ -111,6 +111,7 @@
                 "run_dram_bins":        { "type": "boolean", "default": false },
                 "run_checkm1":          { "type": "boolean", "default": true },
                 "hq_quality_source":    { "type": "string", "enum": ["both", "checkm1", "checkm2"], "default": "both", "description": "Which CheckM report(s) classify a bin as HQ; a bin is HQ if it passes in any selected report." },
+                "within_sample_dereplication": { "type": "string", "enum": ["none", "sample", "group"], "default": "none", "description": "Dereplicate bins within each sample ('sample') or each samplesheet group ('group'), selecting HQ MAGs within that unit; 'none' disables it. Independent of skip_dereplication (across-all-samples): across-only = skip_dereplication false + none; within-only = skip_dereplication true + sample/group; both = skip_dereplication false + sample/group." },
                 "run_fastani":          { "type": "boolean", "default": true },
                 "run_parsnp":           { "type": "boolean", "default": true },
                 "run_panaroo":          { "type": "boolean", "default": true },

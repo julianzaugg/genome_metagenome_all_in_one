@@ -21,6 +21,8 @@ process READ_STAT_REPORT {
     path(hq_repmag_abund, stageAs: 'hq_repmags/*')
     path(hq_derep_abund, stageAs: 'hq_derep_repmags/*')
     path(hq_ref_abund,   stageAs: 'hq_ref_repmags/*')
+    path(ws_derep_abund, stageAs: 'ws_derep_repmags/*')
+    path(ws_hq_abund,    stageAs: 'ws_hq_repmags/*')
 
     output:
     path 'read_stat_report.tsv', emit: report
@@ -38,6 +40,8 @@ process READ_STAT_REPORT {
         --hq-repmag-dir hq_repmags \\
         --hq-derep-repmag-dir hq_derep_repmags \\
         --hq-ref-repmag-dir hq_ref_repmags \\
+        --ws-derep-repmag-dir ws_derep_repmags \\
+        --ws-hq-repmag-dir ws_hq_repmags \\
         --out read_stat_report.tsv
 
     cat <<-END_VERSIONS > versions.yml
@@ -58,6 +62,8 @@ process READ_STAT_REPORT {
         --hq-repmag-dir hq_repmags \\
         --hq-derep-repmag-dir hq_derep_repmags \\
         --hq-ref-repmag-dir hq_ref_repmags \\
+        --ws-derep-repmag-dir ws_derep_repmags \\
+        --ws-hq-repmag-dir ws_hq_repmags \\
         --out read_stat_report.tsv
 
     echo '"${task.process}": {python: stub}' > versions.yml

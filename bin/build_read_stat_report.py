@@ -11,6 +11,8 @@ Sources (each directory is optional; whatever is present shapes the columns):
   --hq-repmag-dir    CoverM reads-vs-HQ-rep-MAGs-only:          {id}_abundances.tsv
   --hq-derep-repmag-dir  CoverM reads-vs-HQ-first-then-dereplicated MAGs: {id}_abundances.tsv
   --hq-ref-repmag-dir    CoverM reads-vs-(HQ MAGs + reference genomes) dereplicated set: {id}_abundances.tsv
+  --ws-derep-repmag-dir  CoverM reads-vs-within-sample(or -group) dereplicated bins: {id}_abundances.tsv
+  --ws-hq-repmag-dir     CoverM reads-vs-within-sample(or -group) HQ-first-then-dereplicated MAGs: {id}_abundances.tsv
 
 Rules:
   - All percentages are vs Raw (raw input reads). Raw has no percent.
@@ -33,6 +35,9 @@ Rules:
     dereplicate first and then keep the HQ representatives).
   - Reads_mapped_HQ_Ref_MAGs_count is a fourth HQ mapping (--hq-ref-repmag-dir)
     against the HQ MAGs dereplicated TOGETHER with external reference genomes.
+  - Reads_mapped_PerSample_Derep_MAGs_count / Reads_mapped_PerSample_HQ_MAGs_count
+    map each sample's reads to bins dereplicated WITHIN that sample (or group)
+    only, not across all samples (--ws-derep-repmag-dir / --ws-hq-repmag-dir).
 
 Two report shapes:
   metagenome  Sample_ID, GBbp, Raw_count, <stage>_count/percent...,
@@ -195,7 +200,8 @@ def raw_record(stages):
 # Report assembly
 # ---------------------------------------------------------------------------
 def build(mode, seqkit, scaffold, scaffold_sr, repmag, hq_names, has_hq,
-          repmag_direct, repmag_hq_derep, repmag_hq_ref):
+          repmag_direct, repmag_hq_derep, repmag_hq_ref,
+          repmag_ws_derep, repmag_ws_hq):
     samples = sorted(seqkit)
 
     present_stages = set()
@@ -220,6 +226,10 @@ def build(mode, seqkit, scaffold, scaffold_sr, repmag, hq_names, has_hq,
             header += ["Reads_mapped_HQ_Derep_MAGs_count", "Reads_mapped_HQ_Derep_MAGs_percent"]
         if repmag_hq_ref:
             header += ["Reads_mapped_HQ_Ref_MAGs_count", "Reads_mapped_HQ_Ref_MAGs_percent"]
+        if repmag_ws_derep:
+            header += ["Reads_mapped_PerSample_Derep_MAGs_count", "Reads_mapped_PerSample_Derep_MAGs_percent"]
+        if repmag_ws_hq:
+            header += ["Reads_mapped_PerSample_HQ_MAGs_count", "Reads_mapped_PerSample_HQ_MAGs_percent"]
     else:  # isolate
         if scaffold:
             header += ["Covered_fraction", "Mean_coverage", "Read_count", "Read_count_percent"]
@@ -265,6 +275,14 @@ def build(mode, seqkit, scaffold, scaffold_sr, repmag, hq_names, has_hq,
                 rec = repmag_hq_ref.get(sid, {})
                 c = rec.get("count")
                 row += ["" if c is None else str(c), pct(c, raw_reads) if c is not None else ""]
+            if repmag_ws_derep:
+                rec = repmag_ws_derep.get(sid, {})
+                c = rec.get("count")
+                row += ["" if c is None else str(c), pct(c, raw_reads) if c is not None else ""]
+            if repmag_ws_hq:
+                rec = repmag_ws_hq.get(sid, {})
+                c = rec.get("count")
+                row += ["" if c is None else str(c), pct(c, raw_reads) if c is not None else ""]
         else:
             if scaffold:
                 rec = scaffold.get(sid, {})
@@ -305,6 +323,8 @@ def main():
     ap.add_argument("--hq-repmag-dir", default="")
     ap.add_argument("--hq-derep-repmag-dir", default="")
     ap.add_argument("--hq-ref-repmag-dir", default="")
+    ap.add_argument("--ws-derep-repmag-dir", default="")
+    ap.add_argument("--ws-hq-repmag-dir", default="")
     args = ap.parse_args()
 
     if not os.path.isdir(args.seqkit_dir):
@@ -332,8 +352,15 @@ def main():
     hq_ref_dir = maybe_dir(args.hq_ref_repmag_dir)
     repmag_hq_ref = parse_coverm_dir(hq_ref_dir, "_abundances.tsv") if hq_ref_dir else {}
 
+    ws_derep_dir = maybe_dir(args.ws_derep_repmag_dir)
+    repmag_ws_derep = parse_coverm_dir(ws_derep_dir, "_abundances.tsv") if ws_derep_dir else {}
+
+    ws_hq_dir = maybe_dir(args.ws_hq_repmag_dir)
+    repmag_ws_hq = parse_coverm_dir(ws_hq_dir, "_abundances.tsv") if ws_hq_dir else {}
+
     report = build(args.mode, seqkit, scaffold, scaffold_sr,
-                   repmag, hq_names, has_hq, repmag_direct, repmag_hq_derep, repmag_hq_ref)
+                   repmag, hq_names, has_hq, repmag_direct, repmag_hq_derep, repmag_hq_ref,
+                   repmag_ws_derep, repmag_ws_hq)
     with open(args.out, "w") as fh:
         fh.write(report)
 

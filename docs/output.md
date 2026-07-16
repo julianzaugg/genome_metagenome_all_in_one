@@ -17,10 +17,14 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 08_dereplicated_bins/   # CoverM cluster: representatives/ + high_quality_representatives/ + cluster_definition.tsv
 08_dereplicated_hq_bins/ # CoverM cluster on HQ-first bins: HQ MAGs extracted from the FULL bin set, THEN dereplicated
 08_dereplicated_hq_ref_bins/ # HQ MAGs dereplicated TOGETHER with external reference genomes (if --reference_genomes)
+08_within_sample_dereplicated_bins/<id>/    # per-sample(or -group) dereplicated representatives (if --within_sample_dereplication sample|group)
+08_within_sample_dereplicated_hq_bins/<id>/ # per-sample(or -group) HQ-first-then-dereplicated MAGs
 09_coverm_bins/         # per-sample abundance + bam vs all dereplicated representatives
 09_coverm_hq_bins/      # per-sample abundance + bam vs high_quality_representatives/ only (no competing siblings)
 09_coverm_hq_derep_bins/ # per-sample abundance + bam vs the HQ-first-then-dereplicated set (08_dereplicated_hq_bins)
 09_coverm_hq_ref_bins/  # per-sample abundance + bam vs the HQ-MAGs+references set (08_dereplicated_hq_ref_bins; if --reference_genomes)
+09_coverm_within_sample_derep_bins/ # each sample's reads vs its own within-sample(or -group) dereplicated bins
+09_coverm_within_sample_hq_bins/     # each sample's reads vs its own within-sample(or -group) HQ MAGs
 10_coverm_scaffolds/    # per-sample coverage/counts + bam vs assembled scaffolds
 11_pyrodigal/           # predicted proteins/genes per assembly
 12_gene_catalogue/      # cd-hit catalogue(s) + nucleotide CDS + membership (provenance)
@@ -93,6 +97,13 @@ shape depends on the mode:
   every HQ cluster is represented by an HQ genome. Which CheckM report(s) decide
   "HQ" is controlled by `--hq_quality_source` (`both` (default) | `checkm1` |
   `checkm2`; a bin is HQ if it passes in any selected report).
+
+  With `--within_sample_dereplication sample` (or `group`), two more pairs appear:
+  `Reads_mapped_PerSample_Derep_MAGs` and `Reads_mapped_PerSample_HQ_MAGs`. These
+  map each sample's reads to bins dereplicated **within that sample (or group)
+  only** (`09_coverm_within_sample_derep_bins/` and `09_coverm_within_sample_hq_bins/`),
+  rather than across all samples. This scope is independent of `--skip_dereplication`
+  (across-all): run either alone, or both together.
 - **Isolate**: same QC-stage columns, then CoverM mapping stats against the
   sample's own assembly — `Covered_fraction, Mean_coverage, Read_count,
   Read_count_percent` (with `_SR` variants when a hybrid nanopore isolate also
@@ -117,6 +128,8 @@ read QC and assembly directories:
 09_coverm_hq_bins/      # minimap2-ont, 90% identity, HQ representatives only, + bam
 09_coverm_hq_derep_bins/ # minimap2-ont, HQ-first-then-dereplicated set, + bam
 09_coverm_hq_ref_bins/  # minimap2-ont, HQ-MAGs+references set, + bam (if --reference_genomes)
+09_coverm_within_sample_derep_bins/ # minimap2-ont, within-sample(or -group) dereplicated set, + bam
+09_coverm_within_sample_hq_bins/     # minimap2-ont, within-sample(or -group) HQ MAGs, + bam
 10_coverm_scaffolds_nanopore/ # + bam
 ```
 
