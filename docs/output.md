@@ -32,7 +32,7 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 13_dram/                # DRAM functional annotation of the catalogue (annotated in parallel chunks, merged)
 13_dram_expanded/       # DRAM functional annotation of the expanded catalogue (if --reference_genomes)
 14_dram_bins/           # per-bin DRAM annotation + combined cross-MAG distillate in all_bins/ (if --run_dram_bins)
-15_gtdbtk/              # GTDB-Tk classification of representatives
+15_gtdbtk/              # GTDB-Tk classification of all bins (+ references if --reference_genomes_taxonomy / --marker_tree_include_references)
 16_checkm1/             # CheckM1 on all bins (if --run_checkm1) — also feeds HQ selection
 17_nonpareil/           # coverage redundancy (if --run_nonpareil)
 18_genomespot/          # growth predictions (if --run_genomespot)
@@ -43,7 +43,7 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 23_rpkm/                # SingleM-normalized RPKM for the gene catalogue
 23_rpkm_expanded/       # RPKM for the expanded catalogue; reuses 23_rpkm's SingleM marker blast (if --reference_genomes)
 24_marker_tree/         # MAG + GTDB-reference marker-gene tree (if --run_marker_tree)
-25_reference_genomes/   # normalised reference FASTAs, their CheckM2 report, predicted proteins (if --reference_genomes)
+25_reference_genomes/   # normalised reference FASTAs, their CheckM2 report, predicted proteins, USERREF_-prefixed copies for GTDB-Tk (if --reference_genomes)
 pipeline_info/          # timeline / report / trace / dag
 ```
 
@@ -52,12 +52,20 @@ pipeline_info/          # timeline / report / trace / dag
 references, from the GTDB-Tk marker alignment), `<domain>.treefile` (VeryFastTree
 by default, or IQ-TREE via `--marker_tree_builder iqtree`), and the
 `<domain>.reference_genomes.tsv` / `<domain>.closest_references.tsv` selection
-tables. Placed genomes are the `--marker_tree_genome_source` set filtered by
-CheckM2 `--marker_tree_min_completeness` / `--marker_tree_max_contamination`.
-References come from closest-by-topology (`--marker_tree_use_closest`) and/or
-same-order-different-family (`--marker_tree_use_related`) selection, plus any
+tables. Placed genomes are the `--marker_tree_genome_source` set
+(`representatives` — the default, `hq_representatives` — the high-quality set
+`completeness − 3×contamination ≥ 50`, or `all_bins`) filtered by CheckM2
+`--marker_tree_min_completeness` / `--marker_tree_max_contamination` (the numeric
+filter is skipped for `hq_representatives`, which is already high-quality). GTDB
+*database* references come from closest-by-topology (`--marker_tree_use_closest`)
+and/or same-order-different-family (`--marker_tree_use_related`) selection, plus any
 `--marker_tree_reference_accessions`; disable both selection modes for a
-genomes-only tree.
+genomes-only tree. With `--marker_tree_include_references`, the external
+`--reference_genomes` are classified by GTDB-Tk (renamed `USERREF_*` internally to
+avoid GCA_/GCF_ accession collisions) and placed in the tree alongside the MAGs,
+regardless of their CheckM2 quality; their leaf labels and the published GTDB-Tk
+summary show the original names. `--reference_genomes_taxonomy` classifies the
+references without placing them in a tree.
 
 `high_quality_representatives/` holds bins passing completeness − 3×contamination ≥ 50
 in **either** CheckM1 **or** CheckM2 (whichever ran). CoverM uses CheckM2 to pick

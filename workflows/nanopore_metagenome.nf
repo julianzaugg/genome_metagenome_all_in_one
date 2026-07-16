@@ -38,6 +38,15 @@ workflow NANOPORE_METAGENOME {
             error "--reference_genomes selects cluster representatives by CheckM2 quality, so CheckM2 is required. Rerun with --skip_checkm false, or unset --reference_genomes."
         }
     }
+    if (params.reference_genomes_taxonomy && (!params.reference_genomes || params.skip_taxonomy)) {
+        error "--reference_genomes_taxonomy needs --reference_genomes and taxonomy enabled (not --skip_taxonomy)."
+    }
+    if (params.marker_tree_include_references && (!params.reference_genomes || !params.run_marker_tree || params.skip_taxonomy)) {
+        error "--marker_tree_include_references needs --reference_genomes, --run_marker_tree true, and taxonomy enabled (not --skip_taxonomy)."
+    }
+    if (params.marker_tree_genome_source == 'hq_representatives' && (params.skip_binning || params.skip_dereplication)) {
+        error "--marker_tree_genome_source hq_representatives uses the high-quality representative set, which needs binning + dereplication. Rerun with --skip_binning false --skip_dereplication false, or choose another source."
+    }
     if (params.within_sample_dereplication != 'none') {
         if (params.skip_binning) {
             error "--within_sample_dereplication needs binning. Rerun with --skip_binning false, or set --within_sample_dereplication none."
@@ -266,6 +275,9 @@ workflow NANOPORE_METAGENOME {
             }
         }
 
+        // Classify the external reference genomes in the same GTDB-Tk run when the user
+        // wants their taxonomy and/or wants them placed in the marker tree.
+        def classify_refs = params.reference_genomes && (params.reference_genomes_taxonomy || params.marker_tree_include_references)
         GENOME_TAXONOMY_QC(
             ch_all_bins,
             AVIARY_COLLECT_BINS.out.bins.flatten().map { b -> [ [id: b.baseName], b ] },
@@ -275,16 +287,25 @@ workflow NANOPORE_METAGENOME {
             !params.skip_taxonomy,
             params.run_genomespot,
             params.run_barrnap,
-            params.run_dram_bins
+            params.run_dram_bins,
+            classify_refs ? REFERENCE_GENOMES.out.gtdbtk_genomes : Channel.value([]),
+            classify_refs
         )
         ch_versions = ch_versions.mix(GENOME_TAXONOMY_QC.out.versions)
 
         // --- Marker-gene tree of MAGs + selected GTDB references ---
         if (params.run_marker_tree && !params.skip_taxonomy) {
+            def mt_genomes = params.marker_tree_genome_source == 'all_bins'          ? ch_all_bins
+                           : params.marker_tree_genome_source == 'hq_representatives' ? ch_hq_reps
+                           :                                                            ch_reps
+            // hq_representatives is already HQ-filtered upstream (comp - 3*cont >= 50);
+            // pass no CheckM2 report so the 90/5 threshold filter is not re-applied.
+            def mt_checkm2 = params.marker_tree_genome_source == 'hq_representatives' ? Channel.value([]) : ch_checkm2_tsv
             MARKER_GENE_TREE(
                 GENOME_TAXONOMY_QC.out.gtdbtk_outdir,
-                params.marker_tree_genome_source == 'all_bins' ? ch_all_bins : ch_reps,
-                ch_checkm2_tsv
+                mt_genomes,
+                mt_checkm2,
+                params.marker_tree_include_references ? REFERENCE_GENOMES.out.gtdbtk_genomes : Channel.value([])
             )
             ch_versions = ch_versions.mix(MARKER_GENE_TREE.out.versions)
         }

@@ -8,6 +8,7 @@
  */
 
 include { GTDBTK_CLASSIFYWF }            from '../../modules/nf-core/gtdbtk/classifywf/main'
+include { GTDBTK_RESTORE_NAMES }         from '../../modules/local/gtdbtk_restore'
 include { PYRODIGAL as PYRODIGAL_BINS }  from '../../modules/local/pyrodigal'
 include { GENOMESPOT; GENOMESPOT_COMBINE } from '../../modules/local/genomespot'
 include { BARRNAP }                      from '../../modules/local/barrnap'
@@ -15,29 +16,40 @@ include { DRAM_ANNOTATE_BINS; DRAM_COMBINE_ANNOTATIONS; DRAM_DISTILL } from '../
 
 workflow GENOME_TAXONOMY_QC {
     take:
-    genomes           // collected list of genome fastas
-    per_genome        // [ meta, fasta ] per genome
-    gtdbtk_db         // path
-    genomespot_models // path (may be [])
-    dram_db           // path (may be [])
-    run_taxonomy      // bool
-    run_genomespot    // bool
-    run_barrnap       // bool
-    run_dram_bins     // bool
+    genomes            // collected list of genome fastas
+    per_genome         // [ meta, fasta ] per genome
+    gtdbtk_db          // path
+    genomespot_models  // path (may be [])
+    dram_db            // path (may be [])
+    run_taxonomy       // bool
+    run_genomespot     // bool
+    run_barrnap        // bool
+    run_dram_bins      // bool
+    reference_genomes  // collected list of USERREF_-prefixed reference fastas (may be [])
+    restore_names      // bool: strip the USERREF_ prefix from the published GTDB-Tk output
 
     main:
     ch_gtdbtk        = Channel.empty()
     ch_gtdbtk_outdir = Channel.empty()
     ch_versions      = Channel.empty()
     if (run_taxonomy) {
+        // GTDB-Tk classifies the bins together with the (prefixed) reference genomes
+        // in a single run so both are placed in one per-domain tree.
         GTDBTK_CLASSIFYWF(
-            genomes.map { g -> [ [id: 'all_genomes'], g ] },
+            genomes.flatten().mix(reference_genomes.flatten()).collect().map { g -> [ [id: 'all_genomes'], g ] },
             [ 'gtdb', gtdbtk_db ],
             false
         )
-        ch_gtdbtk        = GTDBTK_CLASSIFYWF.out.summary
-        ch_gtdbtk_outdir = GTDBTK_CLASSIFYWF.out.gtdb_outdir
+        ch_gtdbtk_outdir = GTDBTK_CLASSIFYWF.out.gtdb_outdir   // RAW (prefixed) — consumed by the marker tree
         // GTDBTK_CLASSIFYWF emits versions via topic: versions (handled globally)
+
+        if (restore_names) {
+            GTDBTK_RESTORE_NAMES(GTDBTK_CLASSIFYWF.out.gtdb_outdir)
+            ch_gtdbtk   = GTDBTK_RESTORE_NAMES.out.summary       // published summary with original names
+            ch_versions = ch_versions.mix(GTDBTK_RESTORE_NAMES.out.versions)
+        } else {
+            ch_gtdbtk = GTDBTK_CLASSIFYWF.out.summary
+        }
     }
 
     // Run pyrodigal once if either GenomeSPOT or DRAM-bins needs per-bin proteins

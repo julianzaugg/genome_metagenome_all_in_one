@@ -24,9 +24,10 @@ workflow REFERENCE_GENOMES {
     ch_versions = Channel.empty()
 
     REFERENCE_PREP(reference_files)
-    ch_genomes     = REFERENCE_PREP.out.genomes.collect()
-    ch_genomes_per = REFERENCE_PREP.out.genomes.flatten().map { f -> [ [id: f.baseName], f ] }
-    ch_versions    = ch_versions.mix(REFERENCE_PREP.out.versions)
+    ch_genomes        = REFERENCE_PREP.out.genomes.collect()
+    ch_gtdbtk_genomes = REFERENCE_PREP.out.gtdbtk_genomes.collect()
+    ch_genomes_per    = REFERENCE_PREP.out.genomes.flatten().map { f -> [ [id: f.baseName], f ] }
+    ch_versions       = ch_versions.mix(REFERENCE_PREP.out.versions)
 
     if (run_checkm2_on_refs) {
         CHECKM2_PREDICT_REF(
@@ -45,8 +46,9 @@ workflow REFERENCE_GENOMES {
     ch_versions = ch_versions.mix(PYRODIGAL_REFERENCE.out.versions)
 
     emit:
-    genomes     = ch_genomes                    // collected standardized FASTAs
-    genomes_per = ch_genomes_per                // [ meta, fasta ] per reference
+    genomes       = ch_genomes                  // collected standardized FASTAs (original stems)
+    gtdbtk_genomes = ch_gtdbtk_genomes          // collected FASTAs with USERREF_ prefix for GTDB-Tk/marker tree
+    genomes_per   = ch_genomes_per              // [ meta, fasta ] per reference
     checkm2     = ch_ref_checkm2                 // reference CheckM2 report tsv
     faa         = PYRODIGAL_REFERENCE.out.faa    // [ meta, faa ] per reference
     fna         = PYRODIGAL_REFERENCE.out.fna    // [ meta, fna ] per reference

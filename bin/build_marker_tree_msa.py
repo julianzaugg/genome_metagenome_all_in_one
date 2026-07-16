@@ -43,6 +43,11 @@ def strip_ext(name):
     return re.sub(r"\.(fa|fna|fasta)$", "", base)
 
 
+def display_id(name, prefix):
+    """Original genome name for display (drop the reserved reference prefix)."""
+    return name[len(prefix):] if prefix and name.startswith(prefix) else name
+
+
 def read_singleline_fasta(path, opener):
     """Yield (id, full_header, seq) from a FASTA whose records are single-line.
 
@@ -189,12 +194,20 @@ def main():
     ap.add_argument("--use-closest", action="store_true")
     ap.add_argument("--use-related", action="store_true")
     ap.add_argument("--exclude-pattern", default="", help="Extra regex to exclude from closest leaves")
+    ap.add_argument("--reference-prefix", default="",
+                    help="Reserved prefix marking external reference genomes; they are always "
+                         "placed (bypass the quality filter) and shown with the prefix stripped")
     args = ap.parse_args()
 
     rep_ids = {strip_ext(f) for f in os.listdir(args.genomes_dir)}
     qual = quality_pass(args.checkm2, args.min_completeness, args.max_contamination)
     kept = rep_ids if qual is None else (rep_ids & qual)
-    eprint(f"[marker-tree] {len(rep_ids)} genomes supplied, {len(kept)} kept after quality filter")
+    # External reference genomes are deliberate anchors — always place them, regardless
+    # of the CheckM2 quality filter (they may have no row in the MAG CheckM2 report).
+    ref_ids = {r for r in rep_ids if args.reference_prefix and r.startswith(args.reference_prefix)}
+    kept = kept | ref_ids
+    eprint(f"[marker-tree] {len(rep_ids)} genomes supplied ({len(ref_ids)} references), "
+           f"{len(kept)} kept after quality filter")
 
     user_accessions = []
     if args.accessions and os.path.exists(args.accessions):
@@ -222,7 +235,8 @@ def main():
         out_records = []  # (header_without_gt, seq)
         for bid in domain_kept:
             lin = lineages.get(bid, "")
-            out_records.append((f"{bid} {lin}".strip(), user[bid][1]))
+            # look up the lineage with the (possibly prefixed) id, but label with the original
+            out_records.append((f"{display_id(bid, args.reference_prefix)} {lin}".strip(), user[bid][1]))
 
         # Reference genomes available in the combined MSA (user + references)
         full_recs = {}
@@ -242,7 +256,7 @@ def main():
             )
             with open(f"{domain}.closest_references.tsv", "w") as o:
                 for q, leaf in pairs:
-                    o.write(f"{q}\t{leaf}\n")
+                    o.write(f"{display_id(q, args.reference_prefix)}\t{leaf}\n")
                     if leaf.startswith(REF_PREFIXES):
                         refs.add(leaf)
 

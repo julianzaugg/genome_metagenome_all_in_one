@@ -116,7 +116,9 @@ workflow NANOPORE_ISOLATE {
         !params.skip_taxonomy,
         params.run_genomespot,
         params.run_barrnap,
-        params.run_dram_bins
+        params.run_dram_bins,
+        Channel.value([]),   // no external reference genomes in isolate mode
+        false                // no USERREF_ prefix to restore
     )
     ch_versions = ch_versions.mix(GENOME_TAXONOMY_QC.out.versions)
 

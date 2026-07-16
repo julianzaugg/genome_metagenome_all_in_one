@@ -17,11 +17,17 @@ process REFERENCE_PREP {
 
     output:
     path 'reference_genomes/*.fasta', emit: genomes
+    path 'gtdbtk_refs/*.fasta',       emit: gtdbtk_genomes
     path 'versions.yml',              emit: versions
 
     script:
+    // gtdbtk_refs/ holds a copy of each reference whose stem is prefixed with the
+    // reserved token USERREF_ so GTDB-Tk sees a non-accession id — avoids the hard
+    // error GTDB-Tk raises when a user genome id (e.g. GCA_/GCF_...) collides with a
+    // GTDB reference accession. The prefix is stripped again in the tree labels and
+    // the published GTDB-Tk summary.
     """
-    mkdir -p reference_genomes
+    mkdir -p reference_genomes gtdbtk_refs
     : > seen_stems.txt
     for f in refs_in/*; do
         [ -e "\$f" ] || continue
@@ -36,6 +42,12 @@ process REFERENCE_PREP {
             *.fas)   stem="\${stem%.fas}" ;;
         esac
 
+        case "\$stem" in
+            USERREF_*)
+                echo "[REFERENCE_PREP] Reference genome stem '\$stem' (from '\$b') starts with the reserved prefix 'USERREF_'. Rename the reference file." >&2
+                exit 1 ;;
+        esac
+
         if grep -qxF "\$stem" seen_stems.txt; then
             echo "[REFERENCE_PREP] Duplicate reference genome stem '\$stem' (from '\$b'). Reference basenames must be unique." >&2
             exit 1
@@ -47,6 +59,7 @@ process REFERENCE_PREP {
             *.gz) gzip -dc "\$f" > "\$out" ;;
             *)    cp -L "\$f" "\$out" ;;
         esac
+        cp -L "\$out" "gtdbtk_refs/USERREF_\${stem}.fasta"
     done
 
     if ! ls reference_genomes/*.fasta >/dev/null 2>&1; then
@@ -62,7 +75,7 @@ process REFERENCE_PREP {
 
     stub:
     """
-    mkdir -p reference_genomes
+    mkdir -p reference_genomes gtdbtk_refs
     for f in refs_in/*; do
         [ -e "\$f" ] || continue
         b=\$(basename "\$f"); stem="\${b%.*}"; case "\$stem" in *.f*) stem="\${stem%.*}" ;; esac
@@ -70,6 +83,9 @@ process REFERENCE_PREP {
         echo "ACGT"       >> "reference_genomes/\${stem}.fasta"
     done
     ls reference_genomes/*.fasta >/dev/null 2>&1 || { echo ">ref_1" > reference_genomes/ref.fasta; echo "ACGT" >> reference_genomes/ref.fasta; }
+    for g in reference_genomes/*.fasta; do
+        cp -L "\$g" "gtdbtk_refs/USERREF_\$(basename "\$g")"
+    done
     echo '"${task.process}": {bash: stub}' > versions.yml
     """
 }

@@ -14,15 +14,17 @@ include { MARKER_TREE_IQTREE      } from '../../modules/local/marker_tree'
 
 workflow MARKER_GENE_TREE {
     take:
-    gtdbtk_outdir   // [ meta, gtdbtk_dir ]  (GTDBTK_CLASSIFYWF.out.gtdb_outdir)
-    genomes         // collected list of user genome fastas to place
-    checkm2_report  // CheckM2 quality_report.tsv (path or [])
+    gtdbtk_outdir     // [ meta, gtdbtk_dir ]  (GTDBTK_CLASSIFYWF.out.gtdb_outdir, RAW/prefixed)
+    genomes           // collected list of user genome fastas to place
+    checkm2_report    // CheckM2 quality_report.tsv (path or [])
+    reference_genomes // collected USERREF_-prefixed reference fastas to also place (may be [])
 
     main:
     ch_versions = Channel.empty()
 
     // Build the python CLI flags from params (centralised here so the call site
-    // stays clean and the module just runs the script).
+    // stays clean and the module just runs the script). --reference-prefix is a
+    // no-op when no reference genomes are supplied.
     def opts = [
         "--domains bac120,ar53",
         "--min-completeness ${params.marker_tree_min_completeness}",
@@ -31,14 +33,18 @@ workflow MARKER_GENE_TREE {
         "--related-per-order ${params.marker_tree_related_per_order}",
         params.marker_tree_use_closest ? "--use-closest" : "",
         params.marker_tree_use_related ? "--use-related" : "",
-        params.marker_tree_exclude_pattern ? "--exclude-pattern '${params.marker_tree_exclude_pattern}'" : ""
+        params.marker_tree_exclude_pattern ? "--exclude-pattern '${params.marker_tree_exclude_pattern}'" : "",
+        "--reference-prefix USERREF_"
     ].findAll { it }.join(' ')
 
     def accessions = params.marker_tree_reference_accessions
         ? file(params.marker_tree_reference_accessions, checkIfExists: true)
         : []
 
-    MARKER_TREE_PREP(gtdbtk_outdir, checkm2_report, genomes, accessions, opts)
+    // Place the chosen MAG set together with any external reference genomes.
+    ch_place = genomes.flatten().mix(reference_genomes.flatten()).collect()
+
+    MARKER_TREE_PREP(gtdbtk_outdir, checkm2_report, ch_place, accessions, opts)
     ch_versions = ch_versions.mix(MARKER_TREE_PREP.out.versions)
 
     // One MSA per domain → [ domain, msa ]; need ≥3 taxa to build a tree.
