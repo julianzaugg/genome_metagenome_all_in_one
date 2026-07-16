@@ -128,6 +128,7 @@ workflow ILLUMINA_ISOLATE {
         [],
         [],
         [],
+        [],
         []
     )
     ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)
