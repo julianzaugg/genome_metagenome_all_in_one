@@ -325,10 +325,11 @@ workflow ILLUMINA_METAGENOME {
         // --- Marker-gene tree of MAGs + selected GTDB references ---
         if (params.run_marker_tree && !params.skip_taxonomy) {
             def mt_genomes = params.marker_tree_genome_source == 'all_bins'          ? ch_all_bins
-                           : params.marker_tree_genome_source == 'hq_representatives' ? ch_hq_reps
+                           : params.marker_tree_genome_source == 'hq_representatives' ? ch_hq_derep_reps
                            :                                                            ch_reps
-            // hq_representatives is already HQ-filtered upstream (comp - 3*cont >= 50);
-            // pass no CheckM2 report so the 90/5 threshold filter is not re-applied.
+            // hq_representatives is the HQ-first-then-dereplicated set (HQ MAGs extracted from
+            // the full bin set, then clustered among themselves) — already HQ-filtered upstream
+            // (comp - 3*cont >= 50), so pass no CheckM2 report to avoid re-applying the threshold.
             def mt_checkm2 = params.marker_tree_genome_source == 'hq_representatives' ? Channel.value([]) : ch_checkm2_tsv
             MARKER_GENE_TREE(
                 GENOME_TAXONOMY_QC.out.gtdbtk_outdir,
