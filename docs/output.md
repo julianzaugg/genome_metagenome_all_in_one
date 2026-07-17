@@ -53,8 +53,9 @@ references, from the GTDB-Tk marker alignment), `<domain>.treefile` (VeryFastTre
 by default, or IQ-TREE via `--marker_tree_builder iqtree`), and the
 `<domain>.reference_genomes.tsv` / `<domain>.closest_references.tsv` selection
 tables. Placed genomes are the `--marker_tree_genome_source` set
-(`representatives` — the default, `hq_representatives` — the high-quality set
-`completeness − 3×contamination ≥ 50`, or `all_bins`) filtered by CheckM2
+(`representatives` — the default, `hq_representatives` — the HQ-first-then-
+dereplicated set (HQ bins, `completeness − 3×contamination ≥ 50`, extracted
+from the full bin set and clustered among themselves), or `all_bins`) filtered by CheckM2
 `--marker_tree_min_completeness` / `--marker_tree_max_contamination` (the numeric
 filter is skipped for `hq_representatives`, which is already high-quality). GTDB
 *database* references come from closest-by-topology (`--marker_tree_use_closest`)
