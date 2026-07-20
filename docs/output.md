@@ -16,7 +16,7 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 07_checkm2/             # CheckM2 on all bins (drives dereplication + HQ selection)
 08_dereplicated_bins/   # CoverM cluster: representatives/ + high_quality_representatives/ + cluster_definition.tsv
 08_dereplicated_hq_bins/ # CoverM cluster on HQ-first bins: HQ MAGs extracted from the FULL bin set, THEN dereplicated
-08_dereplicated_hq_ref_bins/ # HQ MAGs dereplicated TOGETHER with external reference genomes (if --reference_genomes)
+08_dereplicated_hq_ref_bins/ # HQ MAGs (extracted from the FULL bin set, independently of 08_dereplicated_hq_bins) dereplicated TOGETHER with external reference genomes (if --reference_genomes)
 08_within_sample_dereplicated_bins/<id>/    # per-sample(or -group) dereplicated representatives (if --within_sample_dereplication sample|group)
 08_within_sample_dereplicated_hq_bins/<id>/ # per-sample(or -group) HQ-first-then-dereplicated MAGs
 09_coverm_bins/         # per-sample abundance + bam vs all dereplicated representatives
@@ -95,7 +95,10 @@ shape depends on the mode:
   below). With `--reference_genomes`, a `Reads_mapped_HQ_Ref_MAGs` count/percent
   pair is also added — the `09_coverm_hq_ref_bins/` mapping against the HQ MAGs
   dereplicated together with the external reference genomes
-  (`08_dereplicated_hq_ref_bins/`).
+  (`08_dereplicated_hq_ref_bins/`). This HQ extraction is its own independent
+  pass over the full pre-dereplication bin set — it does not reuse the HQ MAGs
+  from `08_dereplicated_hq_bins/` — so it re-applies the same HQ filter before
+  adding the references and clustering.
 
   `09_coverm_hq_derep_bins/` is a third HQ mapping against a **differently
   constructed** set (`08_dereplicated_hq_bins/`). The `_HQ_MAGs*` sets above
