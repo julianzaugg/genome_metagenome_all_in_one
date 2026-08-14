@@ -30,7 +30,7 @@ one-off settings on the command line.
 | Change a **tool's flags** (e.g. cd-hit identity, fastp settings) | `conf/modules.config` (`ext.args`) |
 | Change an **output folder name/number** | `conf/modules.config` (`publishDir`) |
 | Give a step **more CPU/RAM/time** | `conf/base.config` (its `withLabel` tier) — or `--max_cpus/--max_memory` |
-| Turn a **step on/off** | a `--skip_*` / `--run_*` flag (see `nextflow run . --help`) |
+| Turn a **step on/off** | a `--skip_*` / `--run_*` flag — see [parameters.md](parameters.md) for the full per-mode list |
 | Set **SLURM account/partition** | `conf/bunya.config` |
 | Where bespoke **`.sif` images live** | `conf/local.config` / `conf/bunya.config` (`container_base`, default `<projectDir>/containers`) |
 

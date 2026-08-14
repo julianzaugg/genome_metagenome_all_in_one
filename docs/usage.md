@@ -81,9 +81,11 @@ published with the chewBBACA outputs.
 
 Steps are toggled with `--skip_*` / `--run_*` params, e.g.
 `--skip_singlem --skip_mobile_elements --run_nonpareil false`. See
-`nextflow run . --help` for the full list. Reorderable steps are independent
-subworkflows fed from shared upstream channels, so changing the flow is a wiring
-edit in `workflows/<mode>.nf`, not a rewrite.
+[parameters.md](parameters.md) for the full list, broken down by which
+`--mode` each flag applies to and the requirements/conflicts between them.
+Reorderable steps are independent subworkflows fed from shared upstream
+channels, so changing the flow is a wiring edit in `workflows/<mode>.nf`, not
+a rewrite.
 
 Host removal is on by default for metagenomes. Keep it on for normal runs and
 provide either `--cleanifier_db` or `--host_ref`; use `--skip_host_removal true`
