@@ -209,7 +209,10 @@ workflow ILLUMINA_METAGENOME {
             // CHECKM2_PREDICT emits versions via topic: versions (collected globally below)
         }
         if (params.run_checkm1) {
-            CHECKM1_LINEAGEWF(ch_all_bins)
+            CHECKM1_LINEAGEWF(
+                ch_all_bins,
+                file(params.checkm1_db, checkIfExists: true)
+            )
             ch_checkm1_tsv = CHECKM1_LINEAGEWF.out.summary
             ch_versions = ch_versions.mix(CHECKM1_LINEAGEWF.out.versions)
         }
