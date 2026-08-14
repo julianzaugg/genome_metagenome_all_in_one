@@ -115,7 +115,9 @@ workflow ILLUMINA_METAGENOME {
     // --- Host removal ---
     if (!params.skip_host_removal) {
         if (params.cleanifier_db) {
-            ch_cleanifier_index = Channel.value(file(params.cleanifier_db, checkIfExists: true))
+            def cleanifier_filter = file(params.cleanifier_db, checkIfExists: true)
+            def cleanifier_info   = file(cleanifier_filter.toString().replaceAll(/\.filter$/, '.info'), checkIfExists: true)
+            ch_cleanifier_index = Channel.value([cleanifier_filter, cleanifier_info])
         } else {
             if (!params.host_ref) {
                 error "Host removal is enabled but neither --cleanifier_db nor --host_ref is set. Provide a Cleanifier .filter index, provide a FASTA with --host_ref to build one, or rerun with --skip_host_removal true."
