@@ -19,7 +19,7 @@ process AVIARY_RECOVER {
     path(eggnog_db)
 
     output:
-    tuple val(meta), path("${meta.id}/renamed_bins/*.fasta"),             emit: bins
+    tuple val(meta), path("${meta.id}/renamed_bins/*.fasta"),             emit: bins, optional: true
     tuple val(meta), path("${meta.id}/renamed_bins/bin_contig_list.tsv"), emit: bin_contig_list
     tuple val(meta), path("${meta.id}"),                                  emit: recover_dir
     path 'versions.yml',                                                  emit: versions
@@ -71,6 +71,14 @@ EOF
     # Redirect pixi's repodata cache off NFS (Bunya home dirs) onto local /tmp
     export PIXI_CACHE_DIR=\${PIXI_CACHE_DIR:-/tmp/pixi-cache-\${USER:-runner}}
 
+    # Aviary's internal das_tool step exits non-zero when every binner (metabat2,
+    # semibin, rosella, vamb, ...) legitimately recovers zero bins for this sample
+    # (e.g. a low-yield/low-coverage assembly with nothing to cluster). That is a
+    # per-sample outcome, not a pipeline error, so it must not crash the whole run
+    # (AVIARY_COLLECT_BINS below collects bins across ALL samples). Detect that
+    # specific message and continue with an empty bin set for this sample; any
+    # other failure (missing pixi, OOM, bad DB paths, ...) still fails the task.
+    set +e
     aviary recover ${args} ${extra_binners} \\
         --assembly ${assembly} \\
         ${reads_arg} \\
@@ -80,7 +88,19 @@ EOF
         --max_memory ${task.memory.toGiga()} \\
         --gtdb_path "\${gtdb_abs}" \\
         --checkm2-db-path "\${checkm2_dmnd}" \\
-        --eggnog-db-path "\${eggnog_abs}"
+        --eggnog-db-path "\${eggnog_abs}" \\
+        2>&1 | tee aviary_recover.log
+    aviary_exit=\${PIPESTATUS[0]}
+    set -e
+
+    if [ "\$aviary_exit" -ne 0 ]; then
+        if grep -q 'No bins were found by any binners' aviary_recover.log; then
+            echo "WARNING: aviary recovered zero bins for ${meta.id} (no binner produced usable bins); continuing with an empty bin set for this sample." >&2
+        else
+            echo "ERROR: aviary recover failed for ${meta.id} (exit \${aviary_exit}); see aviary_recover.log" >&2
+            exit "\$aviary_exit"
+        fi
+    fi
 
     mkdir -p ${meta.id}/renamed_bins
     shopt -s nullglob
