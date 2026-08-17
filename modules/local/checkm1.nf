@@ -20,9 +20,10 @@ process CHECKM1_LINEAGEWF {
     def args = task.ext.args ?: ''
     def pplacer_threads = Math.min(task.cpus as int, 40)  // pplacer hangs with many threads (github.com/Ecogenomics/CheckM/issues/341)
     """
-    # CheckM1 has no env-var DB override — it reads a config file written by
-    # `data setRoot`, so this must run before every invocation.
-    checkm data setRoot ${checkm1_db}
+    # `checkm data setRoot` writes DATA_CONFIG into checkm's own package dir,
+    # which is read-only inside the container. Use the CHECKM_DATA_PATH env
+    # var instead — CheckM checks it before falling back to DATA_CONFIG.
+    export CHECKM_DATA_PATH=\$(realpath ${checkm1_db})
 
     checkm lineage_wf ${args} \\
         -x fasta \\
