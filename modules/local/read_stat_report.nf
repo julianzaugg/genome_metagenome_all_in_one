@@ -23,10 +23,13 @@ process READ_STAT_REPORT {
     path(hq_ref_abund,   stageAs: 'hq_ref_repmags/*')
     path(ws_derep_abund, stageAs: 'ws_derep_repmags/*')
     path(ws_hq_abund,    stageAs: 'ws_hq_repmags/*')
+    path(assess_stats,   stageAs: 'assess/*')
+    path(assess_genomes, stageAs: 'assess_genomes/*')
 
     output:
-    path 'read_stat_report.tsv', emit: report
-    path 'versions.yml',         emit: versions
+    path 'read_stat_report.tsv',      emit: report
+    path 'mapping_assessment.tsv',    emit: mapping_assessment, optional: true
+    path 'versions.yml',              emit: versions
 
     script:
     """
@@ -42,7 +45,23 @@ process READ_STAT_REPORT {
         --hq-ref-repmag-dir hq_ref_repmags \\
         --ws-derep-repmag-dir ws_derep_repmags \\
         --ws-hq-repmag-dir ws_hq_repmags \\
+        --assess-dir assess \\
+        --assess-genome-dir assess_genomes \\
         --out read_stat_report.tsv
+
+    # Consolidated long-format table of every per-sample mapping_assessment.tsv
+    # row (one per sample x reference-set), for anyone who wants the raw
+    # per-set numbers rather than the wide read_stat_report.tsv columns.
+    first=1
+    for f in assess/*.mapping_assessment.tsv; do
+        [ -e "\$f" ] || continue
+        if [ "\$first" = "1" ]; then
+            cat "\$f" > mapping_assessment.tsv
+            first=0
+        else
+            tail -n +2 "\$f" >> mapping_assessment.tsv
+        fi
+    done
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -64,8 +83,11 @@ process READ_STAT_REPORT {
         --hq-ref-repmag-dir hq_ref_repmags \\
         --ws-derep-repmag-dir ws_derep_repmags \\
         --ws-hq-repmag-dir ws_hq_repmags \\
+        --assess-dir assess \\
+        --assess-genome-dir assess_genomes \\
         --out read_stat_report.tsv
 
+    : > mapping_assessment.tsv
     echo '"${task.process}": {python: stub}' > versions.yml
     """
 }

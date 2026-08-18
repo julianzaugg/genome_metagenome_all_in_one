@@ -36,6 +36,7 @@ default.
 | `--skip_annotation` | `false` | Metagenome modes: DRAM annotation of the gene catalogue. Isolate modes: Bakta + MLST + AMRFinderPlus + ISEScan together — these four can't be toggled independently in isolate modes. Conflicts with `--skip_comparative false` in isolate modes (comparative analysis needs Bakta's GFF/FAA output). |
 | `--skip_mobile_elements` | `false` | The whole mobile-elements subworkflow: geNomad virus/plasmid prediction, CheckV quality assessment, and ANI-based clustering of both. |
 | `--skip_read_mapping` | `false` | CoverM contig-level read mapping to sample assemblies (all modes), and in metagenome modes, CoverM genome-level mapping to representative/HQ/dereplicated genome sets. |
+| `--skip_mapping_assessment` | `false` | The bases-mapped / percent-of-sequenced-bases metrics (`MAPPING_ASSESS`) computed alongside every CoverM read-mapping step above. Has no effect if `--skip_read_mapping` is set (there is nothing to assess). See `docs/output.md` for the metrics themselves. |
 | `--run_checkm1` | `true` | CheckM1 `lineage_wf`, run alongside CheckM2. Feeds `--hq_quality_source` HQ classification. Requires `--checkm1_db`. |
 | `--run_genomespot` | `true` | GenomeSPOT genome-trait prediction on representative genomes. |
 | `--run_barrnap` | `true` | Barrnap rRNA prediction on representative genomes. |

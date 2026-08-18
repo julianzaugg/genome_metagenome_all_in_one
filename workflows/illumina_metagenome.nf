@@ -32,6 +32,7 @@ include { PREP_ASSEMBLY }               from '../modules/local/util'
 include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
 include { COVERM_CLUSTER; COVERM_CLUSTER_HQ; COVERM_CLUSTER_HQ_REF; COVERM_GENOME; COVERM_GENOME as COVERM_GENOME_HQ; COVERM_GENOME as COVERM_GENOME_HQ_DEREP; COVERM_GENOME as COVERM_GENOME_HQ_REF; COVERM_CONTIG } from '../modules/local/coverm'
 include { COVERM_CLUSTER_WS; COVERM_CLUSTER_HQ_WS; COVERM_GENOME_PAIRED as COVERM_GENOME_WS_DEREP; COVERM_GENOME_PAIRED as COVERM_GENOME_WS_HQ } from '../modules/local/coverm'
+include { MAPPING_ASSESS as MAPPING_ASSESS_SCAFFOLDS; MAPPING_ASSESS as MAPPING_ASSESS_BINS; MAPPING_ASSESS as MAPPING_ASSESS_HQ_DIRECT; MAPPING_ASSESS as MAPPING_ASSESS_HQ_DEREP; MAPPING_ASSESS as MAPPING_ASSESS_HQ_REF; MAPPING_ASSESS as MAPPING_ASSESS_WS_DEREP; MAPPING_ASSESS as MAPPING_ASSESS_WS_HQ } from '../modules/local/mapping_assessment'
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
@@ -137,6 +138,13 @@ workflow ILLUMINA_METAGENOME {
     SEQKIT_STATS(ch_read_stats)
     ch_versions = ch_versions.mix(SEQKIT_STATS.out.versions)
 
+    // Raw per-sample read/base totals -- the denominator for MAPPING_ASSESS's
+    // bases-mapped percentages (the pipeline always supplies totals, since
+    // CoverM's --discard-unmapped cache never carries them itself).
+    ch_raw_stats = SEQKIT_STATS.out.stats
+        .filter { meta, stage, t -> stage == 'raw' }
+        .map { meta, stage, t -> [ meta, t ] }
+
     // Read-stat report inputs (filled in as the relevant steps run)
     ch_scaffold_counts = Channel.value([])
     ch_repmag_abund    = Channel.value([])
@@ -146,6 +154,8 @@ workflow ILLUMINA_METAGENOME {
     ch_hq_ref_abund    = Channel.value([])
     ch_ws_derep_abund  = Channel.value([])
     ch_ws_hq_abund     = Channel.value([])
+    ch_assess          = Channel.empty()
+    ch_assess_genomes  = Channel.empty()
 
     // --- External reference genomes (normalise + CheckM2 + protein prediction) ---
     if (params.reference_genomes) {
@@ -179,6 +189,16 @@ workflow ILLUMINA_METAGENOME {
         )
         ch_scaffold_counts = COVERM_CONTIG.out.counts.map { meta, t -> t }.collect().ifEmpty([])
         ch_versions = ch_versions.mix(COVERM_CONTIG.out.versions)
+
+        if (!params.skip_mapping_assessment) {
+            MAPPING_ASSESS_SCAFFOLDS(
+                COVERM_CONTIG.out.bams.join(COVERM_CONTIG.out.contig_map).join(ch_raw_stats),
+                'Scaffolds'
+            )
+            ch_assess         = ch_assess.mix(MAPPING_ASSESS_SCAFFOLDS.out.sample_stats.map { m, t -> t })
+            ch_assess_genomes = ch_assess_genomes.mix(MAPPING_ASSESS_SCAFFOLDS.out.genome_stats.map { m, t -> t })
+            ch_versions = ch_versions.mix(MAPPING_ASSESS_SCAFFOLDS.out.versions)
+        }
     }
 
     // --- Binning (Aviary) ---
@@ -250,6 +270,24 @@ workflow ILLUMINA_METAGENOME {
                 ch_ws_derep_abund = COVERM_GENOME_WS_DEREP.out.abundance.map { m, t -> t }.collect().ifEmpty([])
                 ch_ws_hq_abund    = COVERM_GENOME_WS_HQ.out.abundance.map { m, t -> t }.collect().ifEmpty([])
                 ch_versions = ch_versions.mix(COVERM_GENOME_WS_DEREP.out.versions, COVERM_GENOME_WS_HQ.out.versions)
+
+                if (!params.skip_mapping_assessment) {
+                    MAPPING_ASSESS_WS_DEREP(
+                        COVERM_GENOME_WS_DEREP.out.bams.join(COVERM_GENOME_WS_DEREP.out.contig_map).join(ch_raw_stats),
+                        'PerSample_Derep_MAGs'
+                    )
+                    MAPPING_ASSESS_WS_HQ(
+                        COVERM_GENOME_WS_HQ.out.bams.join(COVERM_GENOME_WS_HQ.out.contig_map).join(ch_raw_stats),
+                        'PerSample_HQ_MAGs'
+                    )
+                    ch_assess = ch_assess
+                        .mix(MAPPING_ASSESS_WS_DEREP.out.sample_stats.map { m, t -> t })
+                        .mix(MAPPING_ASSESS_WS_HQ.out.sample_stats.map { m, t -> t })
+                    ch_assess_genomes = ch_assess_genomes
+                        .mix(MAPPING_ASSESS_WS_DEREP.out.genome_stats.map { m, t -> t })
+                        .mix(MAPPING_ASSESS_WS_HQ.out.genome_stats.map { m, t -> t })
+                    ch_versions = ch_versions.mix(MAPPING_ASSESS_WS_DEREP.out.versions, MAPPING_ASSESS_WS_HQ.out.versions)
+                }
             }
         }
 
@@ -286,6 +324,16 @@ workflow ILLUMINA_METAGENOME {
             ch_repmag_abund = COVERM_GENOME.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
             ch_versions = ch_versions.mix(COVERM_GENOME.out.versions)
 
+            if (!params.skip_mapping_assessment) {
+                MAPPING_ASSESS_BINS(
+                    COVERM_GENOME.out.bams.join(COVERM_GENOME.out.contig_map).join(ch_raw_stats),
+                    'Dereplicated_Bins'
+                )
+                ch_assess         = ch_assess.mix(MAPPING_ASSESS_BINS.out.sample_stats.map { m, t -> t })
+                ch_assess_genomes = ch_assess_genomes.mix(MAPPING_ASSESS_BINS.out.genome_stats.map { m, t -> t })
+                ch_versions = ch_versions.mix(MAPPING_ASSESS_BINS.out.versions)
+            }
+
             // --- Map the same reads directly to the HQ-only subset (not extracted from
             // the full-set mapping above) — avoids undercounting HQ MAGs when dereplication
             // leaves redundant lower-quality near-duplicate bins that split reads away from them ---
@@ -299,11 +347,39 @@ workflow ILLUMINA_METAGENOME {
                 ch_hq_derep_abund = COVERM_GENOME_HQ_DEREP.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
                 ch_versions = ch_versions.mix(COVERM_GENOME_HQ_DEREP.out.versions)
 
+                if (!params.skip_mapping_assessment) {
+                    MAPPING_ASSESS_HQ_DIRECT(
+                        COVERM_GENOME_HQ.out.bams.join(COVERM_GENOME_HQ.out.contig_map).join(ch_raw_stats),
+                        'HQ_MAGs_direct'
+                    )
+                    MAPPING_ASSESS_HQ_DEREP(
+                        COVERM_GENOME_HQ_DEREP.out.bams.join(COVERM_GENOME_HQ_DEREP.out.contig_map).join(ch_raw_stats),
+                        'HQ_Derep_MAGs'
+                    )
+                    ch_assess = ch_assess
+                        .mix(MAPPING_ASSESS_HQ_DIRECT.out.sample_stats.map { m, t -> t })
+                        .mix(MAPPING_ASSESS_HQ_DEREP.out.sample_stats.map { m, t -> t })
+                    ch_assess_genomes = ch_assess_genomes
+                        .mix(MAPPING_ASSESS_HQ_DIRECT.out.genome_stats.map { m, t -> t })
+                        .mix(MAPPING_ASSESS_HQ_DEREP.out.genome_stats.map { m, t -> t })
+                    ch_versions = ch_versions.mix(MAPPING_ASSESS_HQ_DIRECT.out.versions, MAPPING_ASSESS_HQ_DEREP.out.versions)
+                }
+
                 // Map the same reads to the (HQ MAGs + reference genomes) dereplicated set
                 if (params.reference_genomes) {
                     COVERM_GENOME_HQ_REF(ch_clean, ch_hq_ref_derep_reps)
                     ch_hq_ref_abund = COVERM_GENOME_HQ_REF.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
                     ch_versions = ch_versions.mix(COVERM_GENOME_HQ_REF.out.versions)
+
+                    if (!params.skip_mapping_assessment) {
+                        MAPPING_ASSESS_HQ_REF(
+                            COVERM_GENOME_HQ_REF.out.bams.join(COVERM_GENOME_HQ_REF.out.contig_map).join(ch_raw_stats),
+                            'HQ_Ref_MAGs'
+                        )
+                        ch_assess         = ch_assess.mix(MAPPING_ASSESS_HQ_REF.out.sample_stats.map { m, t -> t })
+                        ch_assess_genomes = ch_assess_genomes.mix(MAPPING_ASSESS_HQ_REF.out.genome_stats.map { m, t -> t })
+                        ch_versions = ch_versions.mix(MAPPING_ASSESS_HQ_REF.out.versions)
+                    }
                 }
             }
         }
@@ -407,7 +483,9 @@ workflow ILLUMINA_METAGENOME {
         ch_hq_derep_abund,
         ch_hq_ref_abund,
         ch_ws_derep_abund,
-        ch_ws_hq_abund
+        ch_ws_hq_abund,
+        ch_assess.collect().ifEmpty([]),
+        ch_assess_genomes.collect().ifEmpty([])
     )
     ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)
 

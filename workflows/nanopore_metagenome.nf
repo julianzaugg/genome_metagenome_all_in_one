@@ -18,6 +18,7 @@ include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict
 include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
 include { COVERM_CLUSTER; COVERM_CLUSTER_HQ; COVERM_CLUSTER_HQ_REF; COVERM_GENOME as COVERM_GENOME_ONT; COVERM_GENOME as COVERM_GENOME_HQ_ONT; COVERM_GENOME as COVERM_GENOME_HQ_DEREP_ONT; COVERM_GENOME as COVERM_GENOME_HQ_REF_ONT; COVERM_CONTIG as COVERM_CONTIG_ONT } from '../modules/local/coverm'
 include { COVERM_CLUSTER_WS; COVERM_CLUSTER_HQ_WS; COVERM_GENOME_PAIRED as COVERM_GENOME_WS_DEREP_ONT; COVERM_GENOME_PAIRED as COVERM_GENOME_WS_HQ_ONT } from '../modules/local/coverm'
+include { MAPPING_ASSESS as MAPPING_ASSESS_SCAFFOLDS_ONT; MAPPING_ASSESS as MAPPING_ASSESS_BINS_ONT; MAPPING_ASSESS as MAPPING_ASSESS_HQ_DIRECT_ONT; MAPPING_ASSESS as MAPPING_ASSESS_HQ_DEREP_ONT; MAPPING_ASSESS as MAPPING_ASSESS_HQ_REF_ONT; MAPPING_ASSESS as MAPPING_ASSESS_WS_DEREP_ONT; MAPPING_ASSESS as MAPPING_ASSESS_WS_HQ_ONT } from '../modules/local/mapping_assessment'
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
@@ -112,6 +113,13 @@ workflow NANOPORE_METAGENOME {
         ch_clean = ch_reads
     }
 
+    // Raw per-sample read/base totals -- the denominator for MAPPING_ASSESS's
+    // bases-mapped percentages (the pipeline always supplies totals, since
+    // CoverM's --discard-unmapped cache never carries them itself).
+    ch_raw_stats = LONG_READ_QC.out.stats
+        .filter { meta, stage, t -> stage == 'raw_long' }
+        .map { meta, stage, t -> [ meta, t ] }
+
     // Read-stat report inputs (filled in as the relevant steps run)
     ch_scaffold_counts = Channel.value([])
     ch_repmag_abund    = Channel.value([])
@@ -121,6 +129,8 @@ workflow NANOPORE_METAGENOME {
     ch_hq_ref_abund    = Channel.value([])
     ch_ws_derep_abund  = Channel.value([])
     ch_ws_hq_abund     = Channel.value([])
+    ch_assess          = Channel.empty()
+    ch_assess_genomes  = Channel.empty()
 
     // --- External reference genomes (normalise + CheckM2 + protein prediction) ---
     if (params.reference_genomes) {
@@ -160,6 +170,16 @@ workflow NANOPORE_METAGENOME {
         )
         ch_scaffold_counts = COVERM_CONTIG_ONT.out.counts.map { meta, t -> t }.collect().ifEmpty([])
         ch_versions = ch_versions.mix(COVERM_CONTIG_ONT.out.versions)
+
+        if (!params.skip_mapping_assessment) {
+            MAPPING_ASSESS_SCAFFOLDS_ONT(
+                COVERM_CONTIG_ONT.out.bams.join(COVERM_CONTIG_ONT.out.contig_map).join(ch_raw_stats),
+                'Scaffolds'
+            )
+            ch_assess         = ch_assess.mix(MAPPING_ASSESS_SCAFFOLDS_ONT.out.sample_stats.map { m, t -> t })
+            ch_assess_genomes = ch_assess_genomes.mix(MAPPING_ASSESS_SCAFFOLDS_ONT.out.genome_stats.map { m, t -> t })
+            ch_versions = ch_versions.mix(MAPPING_ASSESS_SCAFFOLDS_ONT.out.versions)
+        }
     }
 
     if (!params.skip_binning) {
@@ -225,6 +245,24 @@ workflow NANOPORE_METAGENOME {
                 ch_ws_derep_abund = COVERM_GENOME_WS_DEREP_ONT.out.abundance.map { m, t -> t }.collect().ifEmpty([])
                 ch_ws_hq_abund    = COVERM_GENOME_WS_HQ_ONT.out.abundance.map { m, t -> t }.collect().ifEmpty([])
                 ch_versions = ch_versions.mix(COVERM_GENOME_WS_DEREP_ONT.out.versions, COVERM_GENOME_WS_HQ_ONT.out.versions)
+
+                if (!params.skip_mapping_assessment) {
+                    MAPPING_ASSESS_WS_DEREP_ONT(
+                        COVERM_GENOME_WS_DEREP_ONT.out.bams.join(COVERM_GENOME_WS_DEREP_ONT.out.contig_map).join(ch_raw_stats),
+                        'PerSample_Derep_MAGs'
+                    )
+                    MAPPING_ASSESS_WS_HQ_ONT(
+                        COVERM_GENOME_WS_HQ_ONT.out.bams.join(COVERM_GENOME_WS_HQ_ONT.out.contig_map).join(ch_raw_stats),
+                        'PerSample_HQ_MAGs'
+                    )
+                    ch_assess = ch_assess
+                        .mix(MAPPING_ASSESS_WS_DEREP_ONT.out.sample_stats.map { m, t -> t })
+                        .mix(MAPPING_ASSESS_WS_HQ_ONT.out.sample_stats.map { m, t -> t })
+                    ch_assess_genomes = ch_assess_genomes
+                        .mix(MAPPING_ASSESS_WS_DEREP_ONT.out.genome_stats.map { m, t -> t })
+                        .mix(MAPPING_ASSESS_WS_HQ_ONT.out.genome_stats.map { m, t -> t })
+                    ch_versions = ch_versions.mix(MAPPING_ASSESS_WS_DEREP_ONT.out.versions, MAPPING_ASSESS_WS_HQ_ONT.out.versions)
+                }
             }
         }
 
@@ -259,6 +297,16 @@ workflow NANOPORE_METAGENOME {
             ch_repmag_abund = COVERM_GENOME_ONT.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
             ch_versions = ch_versions.mix(COVERM_GENOME_ONT.out.versions)
 
+            if (!params.skip_mapping_assessment) {
+                MAPPING_ASSESS_BINS_ONT(
+                    COVERM_GENOME_ONT.out.bams.join(COVERM_GENOME_ONT.out.contig_map).join(ch_raw_stats),
+                    'Dereplicated_Bins'
+                )
+                ch_assess         = ch_assess.mix(MAPPING_ASSESS_BINS_ONT.out.sample_stats.map { m, t -> t })
+                ch_assess_genomes = ch_assess_genomes.mix(MAPPING_ASSESS_BINS_ONT.out.genome_stats.map { m, t -> t })
+                ch_versions = ch_versions.mix(MAPPING_ASSESS_BINS_ONT.out.versions)
+            }
+
             // --- Map the same reads directly to the HQ-only subset (see illumina_metagenome.nf
             // for why this is kept separate from the full-set subset extraction) ---
             if (!params.skip_dereplication) {
@@ -271,11 +319,39 @@ workflow NANOPORE_METAGENOME {
                 ch_hq_derep_abund = COVERM_GENOME_HQ_DEREP_ONT.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
                 ch_versions = ch_versions.mix(COVERM_GENOME_HQ_DEREP_ONT.out.versions)
 
+                if (!params.skip_mapping_assessment) {
+                    MAPPING_ASSESS_HQ_DIRECT_ONT(
+                        COVERM_GENOME_HQ_ONT.out.bams.join(COVERM_GENOME_HQ_ONT.out.contig_map).join(ch_raw_stats),
+                        'HQ_MAGs_direct'
+                    )
+                    MAPPING_ASSESS_HQ_DEREP_ONT(
+                        COVERM_GENOME_HQ_DEREP_ONT.out.bams.join(COVERM_GENOME_HQ_DEREP_ONT.out.contig_map).join(ch_raw_stats),
+                        'HQ_Derep_MAGs'
+                    )
+                    ch_assess = ch_assess
+                        .mix(MAPPING_ASSESS_HQ_DIRECT_ONT.out.sample_stats.map { m, t -> t })
+                        .mix(MAPPING_ASSESS_HQ_DEREP_ONT.out.sample_stats.map { m, t -> t })
+                    ch_assess_genomes = ch_assess_genomes
+                        .mix(MAPPING_ASSESS_HQ_DIRECT_ONT.out.genome_stats.map { m, t -> t })
+                        .mix(MAPPING_ASSESS_HQ_DEREP_ONT.out.genome_stats.map { m, t -> t })
+                    ch_versions = ch_versions.mix(MAPPING_ASSESS_HQ_DIRECT_ONT.out.versions, MAPPING_ASSESS_HQ_DEREP_ONT.out.versions)
+                }
+
                 // Map the same reads to the (HQ MAGs + reference genomes) dereplicated set
                 if (params.reference_genomes) {
                     COVERM_GENOME_HQ_REF_ONT(ch_clean, ch_hq_ref_derep_reps)
                     ch_hq_ref_abund = COVERM_GENOME_HQ_REF_ONT.out.abundance.map { meta, t -> t }.collect().ifEmpty([])
                     ch_versions = ch_versions.mix(COVERM_GENOME_HQ_REF_ONT.out.versions)
+
+                    if (!params.skip_mapping_assessment) {
+                        MAPPING_ASSESS_HQ_REF_ONT(
+                            COVERM_GENOME_HQ_REF_ONT.out.bams.join(COVERM_GENOME_HQ_REF_ONT.out.contig_map).join(ch_raw_stats),
+                            'HQ_Ref_MAGs'
+                        )
+                        ch_assess         = ch_assess.mix(MAPPING_ASSESS_HQ_REF_ONT.out.sample_stats.map { m, t -> t })
+                        ch_assess_genomes = ch_assess_genomes.mix(MAPPING_ASSESS_HQ_REF_ONT.out.genome_stats.map { m, t -> t })
+                        ch_versions = ch_versions.mix(MAPPING_ASSESS_HQ_REF_ONT.out.versions)
+                    }
                 }
             }
         }
@@ -360,7 +436,9 @@ workflow NANOPORE_METAGENOME {
         ch_hq_derep_abund,
         ch_hq_ref_abund,
         ch_ws_derep_abund,
-        ch_ws_hq_abund
+        ch_ws_hq_abund,
+        ch_assess.collect().ifEmpty([]),
+        ch_assess_genomes.collect().ifEmpty([])
     )
     ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)
 

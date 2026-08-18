@@ -444,9 +444,10 @@ process COVERM_GENOME {
     path(genomes, stageAs: 'genomes/*')
 
     output:
-    tuple val(meta), path("${meta.id}_abundances.tsv"), emit: abundance
-    tuple val(meta), path("*.bam"), optional: true,     emit: bams
-    path 'versions.yml',                                emit: versions
+    tuple val(meta), path("${meta.id}_abundances.tsv"),          emit: abundance
+    tuple val(meta), path("${meta.id}.bam"), optional: true,     emit: bams
+    tuple val(meta), path("${meta.id}_contig_genome_map.tsv"),   emit: contig_map
+    path 'versions.yml',                                         emit: versions
 
     script:
     def args = task.ext.args ?: ''
@@ -461,8 +462,25 @@ process COVERM_GENOME {
             --genome-fasta-extension fasta \\
             --output-file ${meta.id}_abundances.tsv \\
             ${reads_arg}
+
+        # CoverM's cached-bam filename is derived from its internal reference
+        # concatenation, not the sample id -> rename deterministically so
+        # MAPPING_ASSESS can join on meta.id.
+        bam_file=\$(ls -t *.bam 2>/dev/null | head -1)
+        [ -n "\$bam_file" ] && mv "\$bam_file" ${meta.id}.bam
+
+        # Contig -> genome map. CoverM's concatenated reference renames every
+        # contig to <genome-file-stem>~<original-header-first-token>; this
+        # mirrors that exactly so it matches the BAM's RNAME field.
+        : > ${meta.id}_contig_genome_map.tsv
+        for f in genomes/*.fasta; do
+            [ -e "\$f" ] || continue
+            genome=\$(basename "\$f" .fasta)
+            awk -v g="\$genome" '/^>/{sub(/^>/,""); split(\$0,a," "); print g"~"a[1]"\\t"g}' "\$f" >> ${meta.id}_contig_genome_map.tsv
+        done
     else
         echo -e "Genome\\t${meta.id} Relative Abundance (%)" > ${meta.id}_abundances.tsv
+        : > ${meta.id}_contig_genome_map.tsv
     fi
 
     cat <<-END_VERSIONS > versions.yml
@@ -474,6 +492,8 @@ process COVERM_GENOME {
     stub:
     """
     echo -e "Genome\\t${meta.id} Relative Abundance (%)" > ${meta.id}_abundances.tsv
+    : > ${meta.id}.bam
+    : > ${meta.id}_contig_genome_map.tsv
     echo '"${task.process}": {coverm: stub}' > versions.yml
     """
 }
@@ -491,9 +511,10 @@ process COVERM_GENOME_PAIRED {
     tuple val(meta), path(reads), path(genomes, stageAs: 'genomes/*')
 
     output:
-    tuple val(meta), path("${meta.id}_abundances.tsv"), emit: abundance
-    tuple val(meta), path("*.bam"), optional: true,     emit: bams
-    path 'versions.yml',                                emit: versions
+    tuple val(meta), path("${meta.id}_abundances.tsv"),          emit: abundance
+    tuple val(meta), path("${meta.id}.bam"), optional: true,     emit: bams
+    tuple val(meta), path("${meta.id}_contig_genome_map.tsv"),   emit: contig_map
+    path 'versions.yml',                                         emit: versions
 
     script:
     def args = task.ext.args ?: ''
@@ -508,8 +529,25 @@ process COVERM_GENOME_PAIRED {
             --genome-fasta-extension fasta \\
             --output-file ${meta.id}_abundances.tsv \\
             ${reads_arg}
+
+        # CoverM's cached-bam filename is derived from its internal reference
+        # concatenation, not the sample id -> rename deterministically so
+        # MAPPING_ASSESS can join on meta.id.
+        bam_file=\$(ls -t *.bam 2>/dev/null | head -1)
+        [ -n "\$bam_file" ] && mv "\$bam_file" ${meta.id}.bam
+
+        # Contig -> genome map. CoverM's concatenated reference renames every
+        # contig to <genome-file-stem>~<original-header-first-token>; this
+        # mirrors that exactly so it matches the BAM's RNAME field.
+        : > ${meta.id}_contig_genome_map.tsv
+        for f in genomes/*.fasta; do
+            [ -e "\$f" ] || continue
+            genome=\$(basename "\$f" .fasta)
+            awk -v g="\$genome" '/^>/{sub(/^>/,""); split(\$0,a," "); print g"~"a[1]"\\t"g}' "\$f" >> ${meta.id}_contig_genome_map.tsv
+        done
     else
         echo -e "Genome\\t${meta.id} Relative Abundance (%)" > ${meta.id}_abundances.tsv
+        : > ${meta.id}_contig_genome_map.tsv
     fi
 
     cat <<-END_VERSIONS > versions.yml
@@ -521,6 +559,8 @@ process COVERM_GENOME_PAIRED {
     stub:
     """
     echo -e "Genome\\t${meta.id} Relative Abundance (%)" > ${meta.id}_abundances.tsv
+    : > ${meta.id}.bam
+    : > ${meta.id}_contig_genome_map.tsv
     echo '"${task.process}": {coverm: stub}' > versions.yml
     """
 }
@@ -533,8 +573,9 @@ process COVERM_CONTIG {
     tuple val(meta), path(reads), path(scaffolds)
 
     output:
-    tuple val(meta), path("${meta.id}_counts.tsv"), emit: counts
-    tuple val(meta), path("*.bam"), optional: true, emit: bams
+    tuple val(meta), path("${meta.id}_counts.tsv"),              emit: counts
+    tuple val(meta), path("${meta.id}.bam"), optional: true,     emit: bams
+    tuple val(meta), path("${meta.id}_contig_genome_map.tsv"),   emit: contig_map
     path 'versions.yml', emit: versions
 
     script:
@@ -548,6 +589,17 @@ process COVERM_CONTIG {
         --output-file ${meta.id}_counts.tsv \\
         ${reads_arg}
 
+    # CoverM's cached-bam filename is derived internally, not the sample id ->
+    # rename deterministically so MAPPING_ASSESS can join on meta.id.
+    bam_file=\$(ls -t *.bam 2>/dev/null | head -1)
+    [ -n "\$bam_file" ] && mv "\$bam_file" ${meta.id}.bam
+
+    # Contig -> genome map: the whole assembly is treated as one "genome"
+    # (name = file stem), matching CoverM's <genome-file-stem>~<header-token>
+    # contig renaming for a single --genome-fasta-files input.
+    genome=\$(basename "${scaffolds}" .fasta)
+    awk -v g="\$genome" '/^>/{sub(/^>/,""); split(\$0,a," "); print g"~"a[1]"\\t"g}' ${scaffolds} > ${meta.id}_contig_genome_map.tsv
+
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         coverm: \$(coverm --version 2>&1 | sed 's/coverm //')
@@ -557,6 +609,8 @@ process COVERM_CONTIG {
     stub:
     """
     echo -e "Genome\\t${meta.id} Covered Fraction\\t${meta.id} Mean\\t${meta.id} Count" > ${meta.id}_counts.tsv
+    : > ${meta.id}.bam
+    : > ${meta.id}_contig_genome_map.tsv
     echo '"${task.process}": {coverm: stub}' > versions.yml
     """
 }

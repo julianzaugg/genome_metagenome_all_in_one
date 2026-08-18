@@ -6,7 +6,7 @@ they are not kept consistent across modes (each `--mode` is a separate run with
 its own output tree, so there's no reason to). Illumina metagenome layout:
 
 ```
-00_read_stats/          # seqkit stats --tabular --all per stage + read_stat_report.tsv
+00_read_stats/          # seqkit stats --tabular --all per stage + read_stat_report.tsv + mapping_assessment.tsv (long-format)
 01_fastp/               # QC'd reads + reports
 02_sylph/               # sylph combined profile
 03_singlem/             # multi-sample SingleM profile + OTU table
@@ -19,13 +19,13 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 08_dereplicated_hq_ref_bins/ # HQ MAGs (extracted from the FULL bin set, independently of 08_dereplicated_hq_bins) dereplicated TOGETHER with external reference genomes (if --reference_genomes)
 08_within_sample_dereplicated_bins/<id>/    # per-sample(or -group) dereplicated representatives (if --within_sample_dereplication sample|group)
 08_within_sample_dereplicated_hq_bins/<id>/ # per-sample(or -group) HQ-first-then-dereplicated MAGs
-09_coverm_bins/         # per-sample abundance + bam vs all dereplicated representatives
-09_coverm_hq_bins/      # per-sample abundance + bam vs high_quality_representatives/ only (no competing siblings)
-09_coverm_hq_derep_bins/ # per-sample abundance + bam vs the HQ-first-then-dereplicated set (08_dereplicated_hq_bins)
-09_coverm_hq_ref_bins/  # per-sample abundance + bam vs the HQ-MAGs+references set (08_dereplicated_hq_ref_bins; if --reference_genomes)
-09_coverm_within_sample_derep_bins/ # each sample's reads vs its own within-sample(or -group) dereplicated bins
-09_coverm_within_sample_hq_bins/     # each sample's reads vs its own within-sample(or -group) HQ MAGs
-10_coverm_scaffolds/    # per-sample coverage/counts + bam vs assembled scaffolds
+09_coverm_bins/         # per-sample abundance + bam + mapping_assessment.tsv[_per_genome] vs all dereplicated representatives
+09_coverm_hq_bins/      # per-sample abundance + bam + mapping_assessment.tsv[_per_genome] vs high_quality_representatives/ only (no competing siblings)
+09_coverm_hq_derep_bins/ # per-sample abundance + bam + mapping_assessment.tsv[_per_genome] vs the HQ-first-then-dereplicated set (08_dereplicated_hq_bins)
+09_coverm_hq_ref_bins/  # per-sample abundance + bam + mapping_assessment.tsv[_per_genome] vs the HQ-MAGs+references set (08_dereplicated_hq_ref_bins; if --reference_genomes)
+09_coverm_within_sample_derep_bins/ # each sample's reads + mapping_assessment.tsv[_per_genome] vs its own within-sample(or -group) dereplicated bins
+09_coverm_within_sample_hq_bins/     # each sample's reads + mapping_assessment.tsv[_per_genome] vs its own within-sample(or -group) HQ MAGs
+10_coverm_scaffolds/    # per-sample coverage/counts + bam + mapping_assessment.tsv[_per_genome] vs assembled scaffolds
 11_pyrodigal/           # predicted proteins/genes per assembly
 12_gene_catalogue/      # cd-hit catalogue(s) + nucleotide CDS + membership (provenance)
 12_gene_catalogue_expanded/ # as 12_gene_catalogue but scaffold + reference-genome proteins (if --reference_genomes)
@@ -122,6 +122,50 @@ shape depends on the mode:
   has short reads mapped).
 
 `GBbp` is the raw total bases (forward + reverse) in gigabasepairs.
+
+### Bases-mapped metrics (unless `--skip_mapping_assessment`)
+
+A read count is a fine proxy for "how much data is represented" only when every
+read is roughly the same length. For nanopore reads, which span three orders of
+magnitude in length, it is not: the *number* of reads that mapped says little
+about the *fraction of sequenced bases* a genome set accounts for. Alongside
+every `Reads_mapped_<Label>_count/percent` pair above, the report also carries
+three base-level metrics, computed by `MAPPING_ASSESS`
+(`bin/assess_mapping.py`) from the same CoverM-cached BAM, re-filtered with
+`coverm filter` at the same identity/aligned-percent thresholds so these
+numbers describe the same alignment set as the `Count` column:
+
+| Column | Metric | Definition |
+| --- | --- | --- |
+| `Bases_mapped_A_<Label>_count/percent` | **A** | Full SEQ length of every primary mapped read (a read counted once at its full length — "how much read data mapped somewhere"). The number to lead with for long reads. |
+| `Bases_mapped_B_<Label>_count/percent` | **B** | Aligned bases (CIGAR `M`/`I`/`=`/`X`) of **primary alignments only** — a stricter, lower-bound figure that excludes soft-clipped/unaligned tails. |
+| `Bases_mapped_C_<Label>_count/percent` | **C** | Aligned bases of primary **and supplementary** alignments — the honest total for a long read that splits across a contig/genome boundary or is chimeric. A read whose primary lands on one genome but has a supplementary segment aligning to another contributes bases to both genomes' per-genome tables (see below), even though `Count` credits the whole read to the primary's genome only. |
+
+All three divide by the **raw sequenced bases** (the same total `GBbp` is
+derived from) — a different denominator from the `_percent` columns next to
+`Count`, which divide by raw *reads*. `Bases_mapped_*_HQ_MAGs` (the subset
+column, alongside `Reads_mapped_HQ_MAGs`) is summed from the `Dereplicated_Bins`
+per-genome table over genomes in `high_quality_representatives/`, mirroring how
+`Reads_mapped_HQ_MAGs` is a row-subset sum of the `09_coverm_bins/` table.
+
+Two more files land alongside each mapping's existing abundance table:
+`{sample}.{Label}.mapping_assessment.tsv` (the one-row source of the columns
+above) and `{sample}.{Label}.mapping_assessment_per_genome.tsv` (the same three
+metrics broken down per genome/contig — the source of the `HQ_MAGs` subset
+sum, and useful on its own for seeing which genomes actually received the
+bases from a split long read). `00_read_stats/mapping_assessment.tsv`
+concatenates every sample's `.mapping_assessment.tsv` into one long-format
+table (`sample, set, ...`) across all reference sets that ran.
+
+**Caveat:** `--min-read-aligned-percent 0.75` on every ONT read-mapping step
+(`conf/modules.config`) is evaluated per **primary** alignment record
+(aligned bases / full read length). A chimeric or split long read whose
+primary segment alone covers less than 75% of the read is discarded entirely
+by CoverM — before `Count`, and before metric C ever sees it — which is
+exactly the kind of read metric C exists to give credit to. This threshold is
+left unchanged for result comparability; lowering or removing it (and
+rerunning) would let both `Count` and metric C credit these reads. See the
+comment beside the `minimap2-ont` `ext.args` entries in `conf/modules.config`.
 
 `06_aviary/all_aviary_bins/` contains the sample-prefixed Aviary bins used by
 CheckM, dereplication, read mapping, and GTDB-Tk. Filenames follow

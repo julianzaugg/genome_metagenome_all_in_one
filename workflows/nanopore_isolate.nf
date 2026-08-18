@@ -15,6 +15,7 @@ include { DORADO_POLISH }         from '../modules/local/long_reads'
 include { CHECKM2_PREDICT }       from '../modules/nf-core/checkm2/predict/main'
 include { CHECKM1_LINEAGEWF }     from '../modules/local/checkm1'
 include { COVERM_CONTIG as COVERM_CONTIG_ONT; COVERM_CONTIG as COVERM_CONTIG_SR } from '../modules/local/coverm'
+include { MAPPING_ASSESS as MAPPING_ASSESS_SCAFFOLDS_ONT; MAPPING_ASSESS as MAPPING_ASSESS_SCAFFOLDS_SR } from '../modules/local/mapping_assessment'
 include { SEQKIT_STATS }          from '../modules/local/read_stats'
 include { READ_STAT_REPORT }      from '../modules/local/read_stat_report'
 include { FASTQ_GZIP_TEST }       from '../modules/local/validate'
@@ -62,8 +63,19 @@ workflow NANOPORE_ISOLATE {
         ch_versions = ch_versions.mix(FASTQ_GZIP_TEST.out.versions)
     }
 
+    // Raw per-sample read/base totals -- the denominator for MAPPING_ASSESS's
+    // bases-mapped percentages. Only long-read totals are tracked in this
+    // workflow (no SEQKIT_STATS pass over the short reads), so the SR mapping
+    // assessment shares the same denominator as the existing Read_count_SR
+    // percent column already does.
+    ch_raw_stats = LONG_READ_QC.out.stats
+        .filter { meta, stage, t -> stage == 'raw_long' }
+        .map { meta, stage, t -> [ meta, t ] }
+
     ch_scaffold_counts = Channel.value([])
     ch_scaffold_sr     = Channel.value([])
+    ch_assess          = Channel.empty()
+    ch_assess_genomes  = Channel.empty()
 
     ch_assembly = Channel.empty()
     if (!params.skip_assembly) {
@@ -161,6 +173,24 @@ workflow NANOPORE_ISOLATE {
         ch_versions = ch_versions
             .mix(COVERM_CONTIG_ONT.out.versions)
             .mix(COVERM_CONTIG_SR.out.versions)
+
+        if (!params.skip_mapping_assessment) {
+            MAPPING_ASSESS_SCAFFOLDS_ONT(
+                COVERM_CONTIG_ONT.out.bams.join(COVERM_CONTIG_ONT.out.contig_map).join(ch_raw_stats),
+                'Scaffolds'
+            )
+            MAPPING_ASSESS_SCAFFOLDS_SR(
+                COVERM_CONTIG_SR.out.bams.join(COVERM_CONTIG_SR.out.contig_map).join(ch_raw_stats),
+                'Scaffolds_SR'
+            )
+            ch_assess = ch_assess
+                .mix(MAPPING_ASSESS_SCAFFOLDS_ONT.out.sample_stats.map { m, t -> t })
+                .mix(MAPPING_ASSESS_SCAFFOLDS_SR.out.sample_stats.map { m, t -> t })
+            ch_assess_genomes = ch_assess_genomes
+                .mix(MAPPING_ASSESS_SCAFFOLDS_ONT.out.genome_stats.map { m, t -> t })
+                .mix(MAPPING_ASSESS_SCAFFOLDS_SR.out.genome_stats.map { m, t -> t })
+            ch_versions = ch_versions.mix(MAPPING_ASSESS_SCAFFOLDS_ONT.out.versions, MAPPING_ASSESS_SCAFFOLDS_SR.out.versions)
+        }
     }
 
     // --- Read-stat report (per-sample read tracking across all steps) ---
@@ -175,7 +205,9 @@ workflow NANOPORE_ISOLATE {
         [],
         [],
         [],
-        []
+        [],
+        ch_assess.collect().ifEmpty([]),
+        ch_assess_genomes.collect().ifEmpty([])
     )
     ch_versions = ch_versions.mix(READ_STAT_REPORT.out.versions)
 
