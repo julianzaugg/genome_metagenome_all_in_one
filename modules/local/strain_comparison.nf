@@ -490,13 +490,30 @@ process TRACS_COMBINE {
     path(alignments, stageAs: 'alignments/*')
 
     output:
-    path 'combined',     emit: combined
-    path 'versions.yml', emit: versions
+    path 'combined',                  emit: combined
+    path 'combined_msa_summary.tsv',  emit: summary
+    path 'versions.yml',              emit: versions
 
     script:
     def args = task.ext.args ?: ''
     """
     tracs combine ${args} -i alignments/* -o combined -t ${task.cpus}
+
+    # How many samples ended up in each reference's alignment. Only references
+    # carrying >=2 samples can produce a pairwise distance, so when the distance
+    # table comes back empty this table says whether the cause is poor reference
+    # sharing between samples (sourmash gather picks references per sample) or
+    # something downstream. The MSAs themselves are not published -- they are
+    # large -- so this is the diagnostic that survives.
+    printf 'reference\\tn_samples\\n' > combined_msa_summary.tsv
+    for f in combined/*; do
+        [ -f "\$f" ] || continue
+        ref=\$(basename "\$f"); ref="\${ref%.*}"
+        printf '%s\\t%s\\n' "\$ref" "\$(grep -c '^>' "\$f" || echo 0)" >> combined_msa_summary.tsv
+    done
+    n_refs=\$(( \$(wc -l < combined_msa_summary.tsv) - 1 ))
+    n_multi=\$(awk -F '\\t' 'NR>1 && \$2>=2' combined_msa_summary.tsv | wc -l)
+    echo "tracs combine: \${n_refs} reference alignment(s), \${n_multi} with >=2 samples (only these can yield pairwise distances)" >&2
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -508,6 +525,7 @@ process TRACS_COMBINE {
     """
     mkdir -p combined
     printf '>sample1\\nACGT\\n>sample2\\nACGT\\n' > combined/rep.1.fasta
+    printf 'reference\\tn_samples\\nrep.1\\t2\\n' > combined_msa_summary.tsv
     echo '"${task.process}": {tracs: stub}' > versions.yml
     """
 }
@@ -557,6 +575,17 @@ process TRACS_CLUSTER {
     def args = task.ext.args ?: '-D filter -c 10'
     """
     tracs cluster ${args} -d ${distances} -o strain_clusters.csv
+
+    # `tracs cluster` exits 0 WITHOUT writing its output when the distance table
+    # has no rows ("No distances available! Abandoning clustering."). No two
+    # samples being comparable is a legitimate outcome -- not every dataset has
+    # shared strains -- so emit an empty table rather than failing the run on a
+    # missing file, and say loudly what happened.
+    if [ ! -s strain_clusters.csv ]; then
+        printf 'sample,cluster\\n' > strain_clusters.csv
+        n_pairs=\$(( \$(wc -l < ${distances}) - 1 ))
+        echo "WARNING: no strain clusters produced -- ${distances} holds \${n_pairs} sample pair(s). With 0 pairs, no reference genome was covered well enough in two or more samples to be compared; check combined_msa_summary.tsv in 28_tracs for how many samples each reference alignment captured. With >0 pairs, none fell under the clustering threshold in this process's ext.args, i.e. no two samples are close enough to call a shared strain." >&2
+    fi
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

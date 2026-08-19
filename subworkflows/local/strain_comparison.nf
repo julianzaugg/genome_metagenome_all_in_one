@@ -63,7 +63,8 @@ workflow STRAIN_COMPARISON {
     ch_instrain_compare  = Channel.empty()
     ch_instrain_excluded = Channel.empty()
     ch_instrain_summary  = Channel.empty()
-    ch_tracs_distances  = Channel.empty()
+    ch_tracs_distances   = Channel.empty()
+    ch_tracs_msa_summary = Channel.empty()
     ch_tracs_clusters   = Channel.empty()
 
     if (run_instrain) {
@@ -134,6 +135,7 @@ workflow STRAIN_COMPARISON {
         TRACS_DISTANCE(TRACS_COMBINE.out.combined)
         TRACS_CLUSTER(TRACS_DISTANCE.out.distances)
 
+        ch_tracs_msa_summary = TRACS_COMBINE.out.summary
         ch_tracs_distances = TRACS_DISTANCE.out.distances
         ch_tracs_clusters  = TRACS_CLUSTER.out.clusters
         ch_versions = ch_versions
@@ -148,6 +150,7 @@ workflow STRAIN_COMPARISON {
     instrain_compare  = ch_instrain_compare
     instrain_excluded = ch_instrain_excluded
     instrain_summary  = ch_instrain_summary
+    tracs_msa_summary = ch_tracs_msa_summary
     tracs_distances   = ch_tracs_distances
     tracs_clusters    = ch_tracs_clusters
     versions          = ch_versions

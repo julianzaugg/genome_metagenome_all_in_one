@@ -300,6 +300,23 @@ reference so gene IDs sit on the same scaffold names as the BAM.
 The same/different call is taken from inStrain's own `strain_clusters` output rather than
 re-derived, so tuning `-ani`/`-cov` changes the call in exactly one place.
 
+`combined_msa_summary.tsv` reports how many samples ended up in each reference's
+alignment. Only references carrying **two or more** samples can produce a pairwise
+distance, so if `transmission_distances.csv` comes back with only a header this table
+tells you whether the cause is poor reference sharing between samples (TRACS picks
+references per sample via sourmash) rather than something downstream. An empty
+distance table also yields an empty `strain_clusters.csv`: no comparable pairs is a
+real outcome, not an error, so the run continues and the warning is written to the
+task log.
+
+Note that `tracs distance` takes an optional `-D`/`--snp_threshold`, and it is a
+**hard** cutoff applied inside pairsnp — pairs further apart than it are never
+emitted. That silently removes exactly the distant-strain pairs needed to tell "these
+samples share no strains" from "nothing was comparable", so the pipeline does not set
+one (TRACS's own default is no cutoff). Add one via `ext.args` only to bound runtime
+on large sample sets, and keep it an order of magnitude above the smallest distance
+of interest.
+
 `28_tracs/` (TRACS, short **or** long reads). `transmission_distances.csv` gives pairwise
 SNP distances per reference genome (with a `filtered SNP distance` column and a
 `sites considered` count), and `strain_clusters.csv` groups samples into transmission
