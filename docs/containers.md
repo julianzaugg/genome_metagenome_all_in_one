@@ -143,8 +143,22 @@ your own CPU:
 apptainer build containers/tracs_1.1.1.sif containers/tracs_1.1.1.def
 ```
 
-The definition file verifies the extension loads (`import TRACS`) during the
-build, so a bad build fails there rather than hours into a pipeline run.
+The build takes a few minutes (~380 MB of conda packages plus the C++
+extension). It verifies `import TRACS`, `tracs --version`, every subcommand's
+`--help`, and the presence of samtools/minimap2/htsbox/sourmash before
+finishing — so a bad image fails at build time rather than hours into a
+pipeline run. The `import` is the check that matters: that is what SIGILLs when
+the extension does not match the CPU.
+
+`cxx-compiler` is in the package list deliberately. Without a C++ toolchain the
+build fails late inside pybind11 with a misleading message:
+
+```
+RuntimeError: Unsupported compiler -- at least C++11 support is needed!
+```
+
+conda-forge's compilers also ship activation scripts that do **not** run inside
+`%post`, so the definition file exports `CC`/`CXX` explicitly.
 
 Then point the pipeline at it:
 
@@ -166,14 +180,16 @@ nextflow inspect . -profile local --mode illumina_metagenome --input <sampleshee
 
 **Mixed hardware.** A SIF built on a newer CPU reintroduces the same crash on
 older nodes. For a heterogeneous cluster, build once against a portable
-baseline instead of `native`:
+baseline instead of `native` by editing the marked line near the top of
+`%post` in `containers/tracs_1.1.1.def`:
 
 ```bash
-TRACS_MARCH=x86-64-v2 apptainer build containers/tracs_1.1.1.sif containers/tracs_1.1.1.def
+TRACS_MARCH="x86-64-v2"    # SSE4.2 baseline (~2009+); x86-64-v3 for AVX2 (~2013+)
 ```
 
-The `.def` applies this by patching `setup.py`, because setuptools appends
-`extra_compile_args` last and `CFLAGS` cannot override them.
+It is a plain shell variable rather than a build argument so it works on any
+Apptainer version. The `.def` applies it by patching `setup.py`, because
+setuptools appends `extra_compile_args` last and `CFLAGS` cannot override them.
 
 **Diagnosing.** To confirm SIGILL is the extension rather than a dependency:
 

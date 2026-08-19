@@ -17,28 +17,38 @@ From: mambaorg/micromamba:1.5.8
 # compute host (or one with the same/older CPU) -- a SIF built on a newer CPU
 # reintroduces the exact same failure.
 #
-# For a heterogeneous cluster, pin a portable baseline instead of native by
-# setting TRACS_MARCH below (e.g. x86-64-v2). This is applied by patching
-# setup.py, because setuptools appends extra_compile_args last, so CFLAGS
-# cannot override them.
+# NOTE: cxx-compiler is required, not optional. Without a C++ toolchain the
+# build fails late, in pybind11's auto_cpp_level, with the misleading message
+# "Unsupported compiler -- at least C++11 support is needed!". conda-forge's
+# compilers also ship activation scripts that do NOT run in %post, so CC/CXX
+# are exported explicitly below.
 
 %post
     set -eu
 
-    # Pin the compiled-for architecture. 'native' = this build machine's CPU.
-    # Override to e.g. x86-64-v2 for a portable build across mixed hardware.
-    TRACS_MARCH="${TRACS_MARCH:-native}"
+    # ------------------------------------------------------------------
+    # Target architecture for the compiled extension.
+    #   native      = this build machine's CPU (default; fastest, least portable)
+    #   x86-64-v2   = portable baseline for mixed/older hardware (SSE4.2, ~2009+)
+    #   x86-64-v3   = AVX2 baseline (~2013+)
+    # Edit this line for a portable build. Applied by patching setup.py, because
+    # setuptools appends extra_compile_args last, so CFLAGS cannot override them.
+    # ------------------------------------------------------------------
+    TRACS_MARCH="native"
 
     micromamba install -y -n base -c conda-forge -c bioconda \
         python=3.12 pip \
-        pybind11 boost-cpp zlib \
-        'numpy<2' pandas scipy joblib tqdm plotly matplotlib-base \
-        sourmash pyfastx ncbi-genome-download \
+        cxx-compiler pybind11 boost-cpp zlib \
+        numpy scipy pandas plotly matplotlib-base pyfastx tqdm joblib \
+        sourmash ncbi-genome-download \
         samtools minimap2 htsbox \
-        git
+        git procps-ng
     micromamba clean -ay
 
     export PATH=/opt/conda/bin:$PATH
+    export CC=$(ls /opt/conda/bin/*-linux-gnu-gcc | head -1)
+    export CXX=$(ls /opt/conda/bin/*-linux-gnu-g++ | head -1)
+    "$CXX" --version | head -1
 
     git clone --depth 1 --branch v1.1.1 https://github.com/gtonkinhill/tracs.git /opt/tracs
     if [ "$TRACS_MARCH" != "native" ]; then
@@ -48,9 +58,18 @@ From: mambaorg/micromamba:1.5.8
 
     pip install --no-cache-dir --no-build-isolation /opt/tracs
 
-    # Fail the build here rather than mid-pipeline if the extension is unusable.
+    # Fail the build here rather than hours into a pipeline run. The import is
+    # the check that matters: it is what SIGILLs when the extension does not
+    # match the CPU.
     python -c "import TRACS; print('TRACS C++ extension loaded OK')"
     tracs --version
+    for c in align combine distance cluster build-db; do
+        tracs "$c" --help >/dev/null
+    done
+    for t in samtools minimap2 htsbox sourmash; do
+        command -v "$t" >/dev/null || { echo "MISSING: $t" >&2; exit 1; }
+    done
+    echo "tracs build OK (-march=${TRACS_MARCH})"
 
 %environment
     export PATH=/opt/conda/bin:$PATH
