@@ -18,6 +18,7 @@ that would otherwise surprise you at runtime. For database setup see
 | `--publish_dir_mode` | `copy` | Nextflow `publishDir` mode (`symlink`, `link`, `copy`, `move`, …). |
 | `--container_base` | — | Directory holding local `.sif` images for bespoke tools (Aviary, Dorado, GenomeSPOT). See [containers.md](containers.md). |
 | `--aviary_container` | — | Optional explicit Aviary `.sif` path; if unset, `${container_base}/aviary_0.13.0.sif` is used. |
+| `--tracs_container` | — | Optional explicit TRACS `.sif` path; if unset the quay.io biocontainer is used. Only needed if `TRACS_*` crashes with exit status 132 (SIGILL) — upstream compiles with `-march=native`, so the published image is tied to bioconda's build-host CPU. See [containers.md](containers.md). |
 
 ## Step toggles, by mode
 

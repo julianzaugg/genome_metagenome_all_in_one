@@ -49,6 +49,10 @@
                 "aviary_container": {
                     "type": "string",
                     "description": "Optional explicit Aviary .sif path. If unset, AVIARY_RECOVER uses ${container_base}/aviary_0.13.0.sif."
+                },
+                "tracs_container": {
+                    "type": "string",
+                    "description": "Optional explicit TRACS .sif path. If unset, TRACS_* use the quay.io biocontainer. Needed only when that image crashes with exit status 132 (SIGILL): TRACS compiles with -march=native, so the published build is tied to bioconda's build-host CPU. Build containers/tracs_1.1.1.def on the compute host -- see docs/containers.md."
                 }
             }
         },

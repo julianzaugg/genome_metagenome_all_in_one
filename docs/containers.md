@@ -30,6 +30,7 @@ self-contained for this pipeline, need local images:
 | `aviary_0.13.0`        | Aviary 0.13.0 requires `pixi` and prebuilt pixi environments; the quay.io biocontainer has the CLI but not `pixi` | metagenome bin recovery |
 | `dorado_1.4.0`         | ONT-proprietary, not on biocontainers | Nanopore basecall/polish |
 | `genomespot_1.0`       | not packaged on biocontainers | bin growth prediction (optional) |
+| `tracs_1.1.1`          | **only if the biocontainer SIGILLs on your CPU** — upstream compiles with `-march=native`, so the published image is not portable (see below) | strain comparison (`--run_tracs`) |
 
 For the **Illumina-metagenome path**, provide `aviary_0.13.0.sif` when binning is
 enabled. Host removal still uses the `cleanifier` biocontainer. Supply either a
@@ -52,6 +53,9 @@ Caveats:
 - **CHECKV_CLUSTER** uses the same Galaxy CheckV SIF as `CHECKV_ENDTOEND` for
   blast+ plus the vendored stdlib `anicalc.py`/`aniclust.py`. The standalone
   `blast` image does not ship Python in all builds.
+- **TRACS** works from the quay.io biocontainer on many hosts, but not all — see
+  the TRACS SIF section below. It is wired to the biocontainer by default and
+  only needs a local image if it crashes with exit status 132.
 
 ### Aviary SIF
 
@@ -100,6 +104,87 @@ apptainer run containers/aviary_0.13.0.sif --help
 
 If your image lives elsewhere, pass `--aviary_container /path/to/aviary_0.13.0.sif`
 or set that parameter in a profile.
+
+### TRACS SIF (only if the biocontainer crashes)
+
+`--run_tracs` uses `quay.io/biocontainers/tracs` by default and needs no local
+image. But if `TRACS_BUILD_DB` (or any `TRACS_*` process) dies like this:
+
+```
+Command error:
+  .command.sh: line 2: 51 Illegal instruction (core dumped) tracs build-db ...
+Command exit status:
+  132
+```
+
+that is `SIGILL` — the binary uses CPU instructions your host does not have.
+
+**Cause.** TRACS's `setup.py` hard-codes
+
+```python
+extra_compile_args = ["-O3", "-ffast-math", "-march=native"]
+```
+
+so its pybind11 extension is compiled for whatever CPU built it. bioconda's
+build host is therefore baked into the published image: it runs on CPUs at
+least as new as that machine, and SIGILLs on anything older. Upstream issue
+[#8](https://github.com/gtonkinhill/tracs/issues/8) is exactly this failure and
+is *closed*, but no fix ever landed — the reporter closed it after a bioconda
+rebuild happened to suit their hardware. The flag is still present on `main`
+(v1.1.1, the newest release and newest build). So there is no version to
+upgrade to, trying other build tags is a coin flip, and an image that works
+today can break on a future rebuild.
+
+**Fix — build it on the machine that will run it**, so `-march=native` targets
+your own CPU:
+
+```bash
+# On the compute host (page, Bunya, ...) -- NOT on a newer machine
+apptainer build containers/tracs_1.1.1.sif containers/tracs_1.1.1.def
+```
+
+The definition file verifies the extension loads (`import TRACS`) during the
+build, so a bad build fails there rather than hours into a pipeline run.
+
+Then point the pipeline at it:
+
+```bash
+nextflow run . ... --run_tracs true --tracs_container /path/to/tracs_1.1.1.sif
+```
+
+Confirm it took effect without launching anything:
+
+```bash
+nextflow inspect . -profile local --mode illumina_metagenome --input <samplesheet> \
+    --run_tracs true --tracs_container /path/to/tracs_1.1.1.sif | grep -A1 TRACS_BUILD_DB
+```
+
+> Use `nextflow inspect`, not the parameter summary printed at the start of a
+> run — that summary evaluates container closures against *default* parameters,
+> so it shows the biocontainer even when an override is active. The same applies
+> to `--aviary_container`.
+
+**Mixed hardware.** A SIF built on a newer CPU reintroduces the same crash on
+older nodes. For a heterogeneous cluster, build once against a portable
+baseline instead of `native`:
+
+```bash
+TRACS_MARCH=x86-64-v2 apptainer build containers/tracs_1.1.1.sif containers/tracs_1.1.1.def
+```
+
+The `.def` applies this by patching `setup.py`, because setuptools appends
+`extra_compile_args` last and `CFLAGS` cannot override them.
+
+**Diagnosing.** To confirm SIGILL is the extension rather than a dependency:
+
+```bash
+apptainer exec <image> python -c "import TRACS; print('extension loads OK')"
+lscpu | grep -oE 'avx[0-9a-z_]+' | sort -u     # what your CPU actually supports
+```
+
+inStrain is unaffected — it is pure Python plus pysam. If TRACS blocks you, run
+with `--run_instrain true --run_tracs false` and add TRACS once the image is
+built.
 
 ## Apptainer config
 

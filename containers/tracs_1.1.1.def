@@ -1,0 +1,60 @@
+Bootstrap: docker
+From: mambaorg/micromamba:1.5.8
+
+# TRACS, built FROM SOURCE on the machine that will run it.
+#
+# Why not the quay.io biocontainer: TRACS's setup.py hard-codes
+#   extra_compile_args = ["-O3", "-ffast-math", "-march=native"]
+# so its pybind11 extension is compiled for whatever CPU built it. The bioconda
+# image therefore only runs on hosts whose CPU is at least as new as the build
+# host's; anywhere else it dies with SIGILL ("Illegal instruction (core
+# dumped)", exit 132) on first use. Upstream issue #8 reports exactly this and
+# was closed by the reporter, not by a fix -- the flag is still present on main
+# (v1.1.1). Which hosts the published image works on is therefore decided by
+# bioconda's build machine, and can change on any rebuild.
+#
+# Building here means -march=native targets THIS machine. Build it on the
+# compute host (or one with the same/older CPU) -- a SIF built on a newer CPU
+# reintroduces the exact same failure.
+#
+# For a heterogeneous cluster, pin a portable baseline instead of native by
+# setting TRACS_MARCH below (e.g. x86-64-v2). This is applied by patching
+# setup.py, because setuptools appends extra_compile_args last, so CFLAGS
+# cannot override them.
+
+%post
+    set -eu
+
+    # Pin the compiled-for architecture. 'native' = this build machine's CPU.
+    # Override to e.g. x86-64-v2 for a portable build across mixed hardware.
+    TRACS_MARCH="${TRACS_MARCH:-native}"
+
+    micromamba install -y -n base -c conda-forge -c bioconda \
+        python=3.12 pip \
+        pybind11 boost-cpp zlib \
+        'numpy<2' pandas scipy joblib tqdm plotly matplotlib-base \
+        sourmash pyfastx ncbi-genome-download \
+        samtools minimap2 htsbox \
+        git
+    micromamba clean -ay
+
+    export PATH=/opt/conda/bin:$PATH
+
+    git clone --depth 1 --branch v1.1.1 https://github.com/gtonkinhill/tracs.git /opt/tracs
+    if [ "$TRACS_MARCH" != "native" ]; then
+        sed -i "s/-march=native/-march=${TRACS_MARCH}/" /opt/tracs/setup.py
+    fi
+    grep -n 'extra_compile_args = ' /opt/tracs/setup.py
+
+    pip install --no-cache-dir --no-build-isolation /opt/tracs
+
+    # Fail the build here rather than mid-pipeline if the extension is unusable.
+    python -c "import TRACS; print('TRACS C++ extension loaded OK')"
+    tracs --version
+
+%environment
+    export PATH=/opt/conda/bin:$PATH
+    export LC_ALL=C
+
+%runscript
+    exec tracs "$@"
