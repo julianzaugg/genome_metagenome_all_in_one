@@ -301,7 +301,8 @@ The same/different call is taken from inStrain's own `strain_clusters` output ra
 re-derived, so tuning `-ani`/`-cov` changes the call in exactly one place.
 
 `combined_msa_summary.tsv` reports how many samples ended up in each reference's
-alignment. Only references carrying **two or more** samples can produce a pairwise
+alignment (TRACS writes one sequence per sample per reference, gzipped as
+`<ref>_combined.fasta.gz`). Only references carrying **two or more** samples can produce a pairwise
 distance, so if `transmission_distances.csv` comes back with only a header this table
 tells you whether the cause is poor reference sharing between samples (TRACS picks
 references per sample via sourmash) rather than something downstream. An empty

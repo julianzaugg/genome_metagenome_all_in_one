@@ -505,11 +505,14 @@ process TRACS_COMBINE {
     # sharing between samples (sourmash gather picks references per sample) or
     # something downstream. The MSAs themselves are not published -- they are
     # large -- so this is the diagnostic that survives.
+    # combine writes <ref>_combined.fasta.gz -- GZIPPED -- and one sequence per
+    # sample per reference, so decompress before counting. (Counting the raw
+    # bytes with grep silently reports nonsense matches from the gzip stream.)
     printf 'reference\\tn_samples\\n' > combined_msa_summary.tsv
-    for f in combined/*; do
+    for f in combined/*.fasta.gz; do
         [ -f "\$f" ] || continue
-        ref=\$(basename "\$f"); ref="\${ref%.*}"
-        printf '%s\\t%s\\n' "\$ref" "\$(grep -c '^>' "\$f" || echo 0)" >> combined_msa_summary.tsv
+        ref=\$(basename "\$f" .fasta.gz)
+        printf '%s\\t%s\\n' "\$ref" "\$(gzip -cd "\$f" | grep -c '^>')" >> combined_msa_summary.tsv
     done
     n_refs=\$(( \$(wc -l < combined_msa_summary.tsv) - 1 ))
     n_multi=\$(awk -F '\\t' 'NR>1 && \$2>=2' combined_msa_summary.tsv | wc -l)
@@ -524,8 +527,8 @@ process TRACS_COMBINE {
     stub:
     """
     mkdir -p combined
-    printf '>sample1\\nACGT\\n>sample2\\nACGT\\n' > combined/rep.1.fasta
-    printf 'reference\\tn_samples\\nrep.1\\t2\\n' > combined_msa_summary.tsv
+    printf '>sample1\\nACGT\\n>sample2\\nACGT\\n' | gzip -c > combined/rep.1_combined.fasta.gz
+    printf 'reference\\tn_samples\\nrep.1_combined\\t2\\n' > combined_msa_summary.tsv
     echo '"${task.process}": {tracs: stub}' > versions.yml
     """
 }
@@ -541,12 +544,30 @@ process TRACS_DISTANCE {
     path 'versions.yml',               emit: versions
 
     script:
-    def args = task.ext.args ?: '--filter -D 1000'
+    def args = task.ext.args ?: '--filter'
     """
+    # tracs combine writes <ref>_combined.fasta.gz, so the glob MUST include the
+    # .gz. Globbing *.fasta matches nothing, and tracs then happily writes a
+    # header-only table and exits 0 -- indistinguishable from "no samples were
+    # comparable". Check explicitly rather than trusting the exit status.
+    n_msa=\$(ls -1 ${combined}/*.fasta.gz 2>/dev/null | wc -l)
+    if [ "\$n_msa" -eq 0 ]; then
+        echo "ERROR: no combined alignments (*.fasta.gz) found in ${combined}/. tracs combine produced nothing usable." >&2
+        ls -la ${combined}/ >&2
+        exit 1
+    fi
+    echo "tracs distance: \${n_msa} combined alignment(s)" >&2
+
     tracs distance ${args} \\
-        --msa ${combined}/*.fasta \\
+        --msa ${combined}/*.fasta.gz \\
         -o transmission_distances.csv \\
         -t ${task.cpus}
+
+    n_pairs=\$(( \$(wc -l < transmission_distances.csv) - 1 ))
+    echo "tracs distance: \${n_pairs} pairwise distance(s) written" >&2
+    if [ "\$n_pairs" -eq 0 ]; then
+        echo "WARNING: no pairwise distances. No reference alignment held two or more samples -- see combined_msa_summary.tsv." >&2
+    fi
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
