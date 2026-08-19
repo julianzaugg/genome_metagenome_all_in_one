@@ -266,6 +266,7 @@ process INSTRAIN_PROFILE {
     tuple val(meta), path(bam), path(bai)
     path(reference)
     path(stb)
+    path(genes)
 
     output:
     tuple val(meta), path("${meta.id}.IS"), emit: profile
@@ -273,11 +274,18 @@ process INSTRAIN_PROFILE {
 
     script:
     def args = task.ext.args ?: '--database_mode --skip_plot_generation'
+    // -g adds per-gene coverage/breadth, nucleotide diversity and pN/pS. Gene IDs
+    // must sit on the reference's scaffold names: inStrain derives the scaffold as
+    // "_".join(gene.split("_")[:-1]), i.e. the prodigal ID minus its trailing
+    // _<geneNum>. Calling genes on the ALREADY-PREFIXED combined reference makes
+    // that hold by construction -- which is why the per-bin PYRODIGAL_BINS output
+    // is not reused here (see the subworkflow).
     """
     inStrain profile ${bam} ${reference} ${args} \\
         -o ${meta.id}.IS \\
         -p ${task.cpus} \\
-        -s ${stb}
+        -s ${stb} \\
+        -g ${genes}
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -287,8 +295,10 @@ process INSTRAIN_PROFILE {
 
     stub:
     """
-    mkdir -p ${meta.id}.IS/output
+    mkdir -p ${meta.id}.IS/output ${meta.id}.IS/raw_data
     printf 'genome\\tcoverage\\tbreadth\\n' > ${meta.id}.IS/output/${meta.id}.IS_genome_info.tsv
+    printf 'gene\\tscaffold\\tcoverage\\tbreadth\\tbreadth_minCov\\tnucl_diversity\\n' > ${meta.id}.IS/output/${meta.id}.IS_gene_info.tsv
+    printf 'name\\tvalue\\ttype\\tdescription\\ngenome_level_info\\traw_data/g.csv\\tpandas\\tstub\\n' > ${meta.id}.IS/raw_data/attributes.tsv
     echo '"${task.process}": {instrain: stub}' > versions.yml
     """
 }

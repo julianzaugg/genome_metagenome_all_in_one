@@ -274,6 +274,22 @@ silently — if a sample you care about appears in this file, check its mapping 
 against the HQ set in the read-stat report before reading anything into its absence
 from the results.
 
+Each profile also carries per-gene results, from `inStrain profile -g`. In
+`<sample>.IS/output/<sample>_gene_info.tsv` you get, per gene: `coverage`,
+`breadth`, `breadth_minCov`, `nucl_diversity`, and the counts behind pN/pS
+(`N_sites`/`S_sites`, SNV/SNS counts); `SNVs.tsv` gains the gene each variant falls
+in and whether it is non-synonymous. Per-gene **breadth against the shared
+reference** is the read-based way to ask whether a gene is present in one sample and
+not another — unlike comparing assembled MAGs, where a gene missing from a bin is
+usually an assembly or binning failure rather than a real deletion, and where the
+lower-coverage sample systematically appears to lose genes. Two caveats: breadth
+tracks sequencing depth, so compare a gene's breadth *relative to* its genome's
+breadth in that sample rather than in absolute terms; and the reference defines the
+gene universe, so this detects loss relative to the reference but cannot discover
+genes absent from it (use the gene catalogue for that). Genes come from
+`26_strain_reference/strain_reference.fna`, called on the combined prefixed
+reference so gene IDs sit on the same scaffold names as the BAM.
+
 `summary/` reshapes that into the tables to actually read:
 - `strain_sharing_counts.tsv` — per sample pair, how many genomes were comparable and how
   many shared a strain. Start here.

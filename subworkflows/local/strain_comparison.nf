@@ -22,6 +22,7 @@
 
 include { STRAIN_GENOME_FILTER  } from '../../modules/local/strain_comparison'
 include { STRAIN_REFERENCE_PREP } from '../../modules/local/strain_comparison'
+include { PYRODIGAL as PYRODIGAL_STRAIN_REF } from '../../modules/local/pyrodigal'
 include { BOWTIE2_STRAIN_BUILD  } from '../../modules/local/strain_comparison'
 include { BOWTIE2_STRAIN_ALIGN  } from '../../modules/local/strain_comparison'
 include { INSTRAIN_PROFILE      } from '../../modules/local/strain_comparison'
@@ -72,10 +73,24 @@ workflow STRAIN_COMPARISON {
         BOWTIE2_STRAIN_BUILD(STRAIN_REFERENCE_PREP.out.fasta)
         BOWTIE2_STRAIN_ALIGN(reads, BOWTIE2_STRAIN_BUILD.out.index)
 
+        // Genes for inStrain's -g (per-gene coverage/breadth, nucleotide diversity,
+        // pN/pS). Called on the COMBINED, ALREADY-PREFIXED reference rather than
+        // reusing GENOME_TAXONOMY_QC's per-bin PYRODIGAL_BINS, because inStrain
+        // reads the scaffold out of each prodigal gene ID -- so the gene file must
+        // carry the same <bin>__<contig> names as the reference and the BAM. The
+        // per-bin output has the original contig names, covers all bins rather than
+        // the filtered reference subset, only runs when GenomeSPOT or DRAM-bins is
+        // enabled, and is produced after this subworkflow. One call on the combined
+        // reference is both cheaper and correct by construction.
+        PYRODIGAL_STRAIN_REF(
+            STRAIN_REFERENCE_PREP.out.fasta.map { f -> [ [id: 'strain_reference'], f ] }
+        )
+
         INSTRAIN_PROFILE(
             BOWTIE2_STRAIN_ALIGN.out.bam,
             STRAIN_REFERENCE_PREP.out.fasta,
-            STRAIN_REFERENCE_PREP.out.stb
+            STRAIN_REFERENCE_PREP.out.stb,
+            PYRODIGAL_STRAIN_REF.out.fna.map { _meta, f -> f }
         )
         INSTRAIN_COMPARE(
             INSTRAIN_PROFILE.out.profile.map { _meta, p -> p }.collect(),
@@ -88,6 +103,7 @@ workflow STRAIN_COMPARISON {
         ch_instrain_summary  = INSTRAIN_SUMMARISE.out.summary
         ch_versions = ch_versions
             .mix(STRAIN_REFERENCE_PREP.out.versions)
+            .mix(PYRODIGAL_STRAIN_REF.out.versions)
             .mix(BOWTIE2_STRAIN_BUILD.out.versions)
             .mix(BOWTIE2_STRAIN_ALIGN.out.versions)
             .mix(INSTRAIN_PROFILE.out.versions)
