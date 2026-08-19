@@ -56,6 +56,8 @@ default.
 | `--within_sample_dereplication` | `none` | `sample`/`group` enables an independent within-sample or within-group dereplication path, reusing the pooled CheckM reports but clustering only that unit's own bins. Requires `--skip_binning false`. Independent of `--skip_dereplication` — see the schema description for the four across/within combinations. |
 | `--run_nonpareil` | `true` | Nonpareil sequencing-coverage/diversity estimation on host-removed clean reads. |
 | `--run_marker_tree` | `false` | The marker-gene tree subworkflow (bac120/ar53 marker-protein alignment + closest/related GTDB reference selection + IQTree or VeryFastTree). Requires `--skip_taxonomy false`. See the `marker_tree_*` family below for tuning. |
+| `--run_instrain` | `false` | inStrain strain-level comparison of samples against the shared cross-sample dereplicated reference set (bowtie2 -> profile -> compare -> summary), answering whether two samples carry the same strain. Requires `--skip_binning false --skip_dereplication false`. `illumina_metagenome` only. See the `strain_*` family below. |
+| `--run_tracs` | `false` | TRACS strain/transmission comparison against the same shared reference set (build-db -> align -> combine -> distance -> cluster), giving pairwise SNP distances and transmission clusters. Builds its reference database from the pipeline's own MAGs, so no GTDB download is needed. Requires `--skip_binning false --skip_dereplication false`. Both metagenome modes; the only option for nanopore. |
 | `--reference_genomes_taxonomy` | `false` | Classify `--reference_genomes` with GTDB-Tk alongside the MAGs. Requires `--reference_genomes` and `--skip_taxonomy false`. |
 | `--marker_tree_include_references` | `false` | Place `--reference_genomes` in the marker-gene tree alongside the MAGs. Requires `--reference_genomes` and `--skip_taxonomy false`. |
 
@@ -126,6 +128,9 @@ Params not in that table:
 | `--marker_tree_related_per_order` | `1` | Related references kept per order. |
 | `--marker_tree_exclude_pattern` | — | Extra regex to exclude leaf names when selecting closest references. |
 | `--marker_tree_reference_accessions` | — | Optional file of GB_/RS_ accessions to add to the marker-gene tree verbatim. |
+| `--strain_genome_source` | `hq_representatives` | Which cross-sample genome set both strain tools map to: `hq_representatives` (HQ MAGs extracted from the full bin set then dereplicated), `hq_representatives_direct` (dereplicate first, then keep HQ representatives), `representatives` (any quality), or `hq_ref_representatives` (HQ MAGs dereplicated with external `--reference_genomes`). All `hq_*` options need a CheckM report. |
+| `--strain_min_completeness` | `90` | CheckM completeness threshold for the strain reference set (MIMAG high-quality), applied on top of `--strain_genome_source`. Incompleteness biases calls toward "same strain", the conservative direction. Genomes absent from the CheckM report (external references) are kept. |
+| `--strain_max_contamination` | `5` | CheckM contamination threshold for the strain reference set. Stricter than the pipeline HQ filter (`completeness - 3*contamination >= 50`) on purpose: contaminating contigs collect reads from unrelated populations and produce spurious SNPs, i.e. false "different strain" calls. |
 | `--aviary_extra_binners` | — | Extra binner name(s) passed to Aviary recover's `--extra-binners` (e.g. `comebin` or `comebin maxbin2`). Metagenome modes only. |
 | `--aviary_long_read_type` | `ont_hq` | Aviary `--long-read-type`. Only takes effect in `nanopore_metagenome` (no-op in `illumina_metagenome`, which always uses the paired-end read path). |
 | `--long_read_type` | `ont_r10` | Autocycler read type. Used only by `nanopore_isolate`. |

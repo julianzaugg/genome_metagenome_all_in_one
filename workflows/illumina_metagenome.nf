@@ -22,6 +22,7 @@ include { REFERENCE_GENOMES }  from '../subworkflows/local/reference_genomes'
 include { GENE_CATALOGUE }     from '../subworkflows/local/gene_catalogue'
 include { GENOME_TAXONOMY_QC } from '../subworkflows/local/genome_taxonomy_qc'
 include { MARKER_GENE_TREE }   from '../subworkflows/local/marker_gene_tree'
+include { STRAIN_COMPARISON }  from '../subworkflows/local/strain_comparison'
 include { MOBILE_ELEMENTS }    from '../subworkflows/local/mobile_elements'
 include { RPKM }               from '../subworkflows/local/rpkm'
 
@@ -77,6 +78,17 @@ workflow ILLUMINA_METAGENOME {
         }
         if (params.skip_checkm && !params.run_checkm1) {
             log.warn "within_sample_dereplication: no CheckM report (skip_checkm true, run_checkm1 false) -> within-sample HQ MAG selection will be empty."
+        }
+    }
+    if (params.run_instrain || params.run_tracs) {
+        if (params.skip_binning || params.skip_dereplication) {
+            error "Strain comparison (--run_instrain / --run_tracs) maps every sample to ONE shared cross-sample reference set, which needs binning + cross-sample dereplication. Rerun with --skip_binning false --skip_dereplication false, or unset --run_instrain / --run_tracs. (--within_sample_dereplication is a separate, additive path and is not a substitute: it clusters each sample's bins on their own, so it produces no shared reference.)"
+        }
+        if (params.strain_genome_source.startsWith('hq') && params.skip_checkm && !params.run_checkm1) {
+            error "--strain_genome_source ${params.strain_genome_source} selects high-quality genomes, which needs a CheckM report. Rerun with --skip_checkm false or --run_checkm1 true, or use --strain_genome_source representatives."
+        }
+        if (params.strain_genome_source == 'hq_ref_representatives' && !params.reference_genomes) {
+            error "--strain_genome_source hq_ref_representatives dereplicates the HQ MAGs together with external references. Set --reference_genomes, or choose another --strain_genome_source."
         }
     }
 
@@ -382,6 +394,26 @@ workflow ILLUMINA_METAGENOME {
                     }
                 }
             }
+        }
+
+        // --- Strain comparison (are samples carrying the same strain?) ---
+        // Both tools map every sample to ONE shared reference set, so this must sit
+        // after the cross-sample dereplication block above.
+        if (params.run_instrain || params.run_tracs) {
+            def strain_genomes = params.strain_genome_source == 'representatives'           ? ch_reps
+                               : params.strain_genome_source == 'hq_representatives_direct' ? ch_hq_reps
+                               : params.strain_genome_source == 'hq_ref_representatives'    ? ch_hq_ref_derep_reps
+                               :                                                              ch_hq_derep_reps
+            STRAIN_COMPARISON(
+                ch_clean,
+                strain_genomes,
+                ch_checkm2_tsv,
+                ch_checkm1_tsv,
+                params.run_instrain,
+                params.run_tracs,
+                false
+            )
+            ch_versions = ch_versions.mix(STRAIN_COMPARISON.out.versions)
         }
 
         // --- Taxonomy + per-genome QC on all bins ---

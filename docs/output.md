@@ -44,6 +44,9 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 23_rpkm_expanded/       # RPKM for the expanded catalogue; reuses 23_rpkm's SingleM marker blast (if --reference_genomes)
 24_marker_tree/         # MAG + GTDB-reference marker-gene tree (if --run_marker_tree)
 25_reference_genomes/   # normalised reference FASTAs, their CheckM2 report, predicted proteins, USERREF_-prefixed copies for GTDB-Tk (if --reference_genomes)
+26_strain_reference/    # genomes used for strain comparison + audit table, combined FASTA, .stb (if --run_instrain / --run_tracs)
+27_instrain/            # inStrain profiles, compare output, and strain-sharing summary tables (if --run_instrain)
+28_tracs/               # TRACS reference db, pairwise SNP/transmission distances, strain clusters (if --run_tracs)
 pipeline_info/          # timeline / report / trace / dag
 ```
 
@@ -223,6 +226,88 @@ comparative outputs under their tool names. Key directories:
 Nanopore isolate mapping emits separate CoverM outputs for long reads
 (`10_coverm_scaffolds_nanopore/`) and hybrid Illumina reads
 (`10_coverm_scaffolds_illumina/`) when both are present.
+
+
+## Strain comparison (`26_strain_reference/`, `27_instrain/`, `28_tracs/`)
+
+Opt-in via `--run_instrain` (illumina_metagenome only) and/or `--run_tracs` (both
+metagenome modes). These answer a question dereplication cannot: 95% ANI clustering
+establishes that two samples share a **species**; these tools establish whether they share
+a **strain**.
+
+Every sample's reads are mapped to **one shared cross-sample reference set**, and the
+resulting per-sample allele profiles are compared pairwise. A shared reference is the whole
+point — per-sample references would give each sample its own coordinate system and nothing
+would be comparable. This is why both tools require `--skip_dereplication false`.
+`--within_sample_dereplication` is a separate, additive path (it clusters each sample's bins
+on their own) and is neither a substitute nor an obstacle: it can be on or off.
+
+`26_strain_reference/` holds the shared reference. `strain_reference_genomes.tsv` is the
+audit table — one row per candidate genome with its completeness, contamination, which
+CheckM report scored it, and whether it was kept. The set starts from
+`--strain_genome_source` (default `hq_representatives`, the HQ-first-then-dereplicated set)
+and is then filtered to `--strain_min_completeness` / `--strain_max_contamination`
+(default 90/5, MIMAG high-quality). That is deliberately stricter than the pipeline's HQ
+filter (`completeness − 3×contamination ≥ 50`), which admits e.g. a 95%-complete /
+15%-contaminated bin — fine for abundance, too loose here (see the caveats below). Genomes
+absent from the CheckM report — external `--reference_genomes` — are kept. If this table
+shows almost everything dropped, that is a real signal about MAG quality, not a bug; the two
+threshold params are the dial. `strain_reference.fasta` / `.stb` are the combined reference
+for inStrain, with every contig header prefixed by its bin name (bins from separate
+per-sample assemblies can otherwise share `NODE_..._length_..._cov_...` names).
+
+`27_instrain/` (inStrain, short reads only). `profiles/<sample>.IS/` are the per-sample
+microdiversity profiles; `strain_compare.IS/output/` holds the raw pairwise tables. The key
+statistic is **popANI**, which counts a position as a difference only when the two samples
+share *no* allele there — so a site where one sample is fixed and the other is polymorphic
+for the same base is not a difference. That is what makes it a strain-sharing statistic
+rather than a consensus-similarity one. It is only meaningful over a decent
+`percent_genome_compared`, hence the conventional call: popANI ≥ 0.99999 over ≥ 50% of the
+genome (set by `-ani`/`-cov` in `conf/modules.config`).
+
+`summary/` reshapes that into the tables to actually read:
+- `strain_sharing_counts.tsv` — per sample pair, how many genomes were comparable and how
+  many shared a strain. Start here.
+- `strain_sharing_summary.tsv` — one row per (genome, sample pair) with popANI, conANI,
+  percent_genome_compared, cluster ids and the same/different call.
+- `strain_sharing_matrix/<genome>.popani.tsv` — sample × sample popANI, for plotting.
+
+The same/different call is taken from inStrain's own `strain_clusters` output rather than
+re-derived, so tuning `-ani`/`-cov` changes the call in exactly one place.
+
+`28_tracs/` (TRACS, short **or** long reads). `transmission_distances.csv` gives pairwise
+SNP distances per reference genome (with a `filtered SNP distance` column and a
+`sites considered` count), and `strain_clusters.csv` groups samples into transmission
+clusters by single linkage. TRACS uses an empirical Bayes model over variable coverage
+rather than fixed thresholds, and its distances are explicit **lower bounds**. Its reference
+database (`strain_db.zip`) is built from the pipeline's own MAGs via `tracs build-db`, which
+embeds both the sourmash index and the genomes themselves — so no GTDB download and no
+network access at run time.
+
+**inStrain is Illumina-only by design.** Its SNV model assumes short, low-error reads, and
+there is no validated long-read parameterisation — swapping in a long-read aligner makes it
+run without making the statistics sound. `--run_instrain` errors in `nanopore_metagenome`;
+use `--run_tracs`, which supports `map-ont` natively.
+
+### Reading these results honestly
+
+- **Depth is the binding constraint, not the reference.** A genome needs adequate coverage
+  in *both* samples of a pair to be compared at all. A missing row means "not enough data",
+  which is easy to misread as "different strains".
+- **Only species you binned are visible.** A species present in two samples but assembled in
+  neither never appears. This is the cost of using your own MAGs instead of a full GTDB
+  reference set — and it applies identically to both tools, so their calls stay comparable.
+- **The two failure modes push in opposite directions.** Incompleteness shrinks the
+  comparable fraction of a genome, so you see proportionally fewer differences and drift
+  toward "same strain" — conservative, and visible in `percent_genome_compared` /
+  `sites considered`. Contamination is the dangerous one: foreign contigs collect reads from
+  unrelated populations, and when those populations differ between samples they generate
+  spurious SNPs and drift toward "different strain". That asymmetry is why the reference set
+  is gated on contamination directly, and why `TRACS_DISTANCE` keeps `--filter` on.
+- **Mild asymmetric reference bias is inherent.** If a MAG was assembled from sample A, A's
+  reads map to their own assembly near-perfectly while B's map to a foreign reference.
+  inStrain's `--database_mode` exists to acknowledge exactly this. It is standard for any
+  map-to-dereplicated-MAGs design, not a defect of this setup.
 
 ## Provenance
 
