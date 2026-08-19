@@ -59,8 +59,9 @@ workflow STRAIN_COMPARISON {
         .collect()
         .filter { gs -> gs && gs.size() > 0 }
 
-    ch_instrain_compare = Channel.empty()
-    ch_instrain_summary = Channel.empty()
+    ch_instrain_compare  = Channel.empty()
+    ch_instrain_excluded = Channel.empty()
+    ch_instrain_summary  = Channel.empty()
     ch_tracs_distances  = Channel.empty()
     ch_tracs_clusters   = Channel.empty()
 
@@ -82,8 +83,9 @@ workflow STRAIN_COMPARISON {
         )
         INSTRAIN_SUMMARISE(INSTRAIN_COMPARE.out.compare)
 
-        ch_instrain_compare = INSTRAIN_COMPARE.out.compare
-        ch_instrain_summary = INSTRAIN_SUMMARISE.out.summary
+        ch_instrain_compare  = INSTRAIN_COMPARE.out.compare
+        ch_instrain_excluded = INSTRAIN_COMPARE.out.excluded
+        ch_instrain_summary  = INSTRAIN_SUMMARISE.out.summary
         ch_versions = ch_versions
             .mix(STRAIN_REFERENCE_PREP.out.versions)
             .mix(BOWTIE2_STRAIN_BUILD.out.versions)
@@ -128,6 +130,7 @@ workflow STRAIN_COMPARISON {
     reference_genomes = ch_ref_genomes
     reference_report  = STRAIN_GENOME_FILTER.out.report
     instrain_compare  = ch_instrain_compare
+    instrain_excluded = ch_instrain_excluded
     instrain_summary  = ch_instrain_summary
     tracs_distances   = ch_tracs_distances
     tracs_clusters    = ch_tracs_clusters

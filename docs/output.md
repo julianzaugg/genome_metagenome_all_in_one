@@ -265,6 +265,15 @@ rather than a consensus-similarity one. It is only meaningful over a decent
 `percent_genome_compared`, hence the conventional call: popANI ≥ 0.99999 over ≥ 50% of the
 genome (set by `-ani`/`-cov` in `conf/modules.config`).
 
+`excluded_profiles.tsv` lists samples left out of the comparison. `--database_mode`
+requires genome-level information in every profile and aborts the whole run if any
+one lacks it, so a sample with almost nothing mapping to the reference set (database
+mode applies a 1x genome-coverage floor) would otherwise take every other sample's
+comparison down with it. Such profiles are dropped and recorded here rather than
+silently — if a sample you care about appears in this file, check its mapping rate
+against the HQ set in the read-stat report before reading anything into its absence
+from the results.
+
 `summary/` reshapes that into the tables to actually read:
 - `strain_sharing_counts.tsv` — per sample pair, how many genomes were comparable and how
   many shared a strain. Start here.

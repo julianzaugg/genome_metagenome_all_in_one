@@ -301,13 +301,48 @@ process INSTRAIN_COMPARE {
     path(stb)
 
     output:
-    path 'strain_compare.IS',  emit: compare
-    path 'versions.yml',       emit: versions
+    path 'strain_compare.IS',      emit: compare
+    path 'excluded_profiles.tsv',  emit: excluded
+    path 'versions.yml',           emit: versions
 
     script:
     def args = task.ext.args ?: '--database_mode --skip_plot_generation -ani 0.99999 -cov 0.5'
     """
-    inStrain compare -i profiles/* ${args} \\
+    # --database_mode requires genome-level information in EVERY profile, and
+    # aborts the entire comparison if any one lacks it (compare_utils.py:
+    # find_relevant_scaffolds raises when SNVprofile.get('genome_level_info')
+    # returns None). A sample with almost nothing mapping to the reference set
+    # never gets that information -- database mode pins --min_genome_coverage 1,
+    # so if no genome reaches 1x there is nothing to profile at genome level.
+    #
+    # Losing every other sample's comparison to the weakest sample in the set is
+    # not a useful failure mode, so drop such profiles explicitly and record
+    # which ones. SNVprofile.get() looks the name up in raw_data/attributes.tsv,
+    # so its presence there is exactly the condition inStrain itself tests.
+    printf 'sample\\treason\\n' > excluded_profiles.tsv
+    usable=""
+    n_usable=0
+    for prof in profiles/*; do
+        [ -d "\$prof" ] || continue
+        name=\$(basename "\$prof" .IS)
+        if [ -s "\$prof/raw_data/attributes.tsv" ] && \\
+           awk -F '\\t' '\$1=="genome_level_info" { found=1 } END { exit !found }' "\$prof/raw_data/attributes.tsv"; then
+            usable="\$usable \$prof"
+            n_usable=\$((n_usable + 1))
+        else
+            printf '%s\\tno_genome_level_info\\n' "\$name" >> excluded_profiles.tsv
+            echo "WARNING: excluding '\$name' from inStrain compare -- the profile has no genome-level information, i.e. no genome reached the 1x coverage floor that --database_mode applies. Usually means very little of this sample's reads map to the reference genome set; check its mapping rate in the read-stat report." >&2
+        fi
+    done
+
+    if [ "\$n_usable" -lt 2 ]; then
+        echo "ERROR: only \$n_usable profile(s) carry genome-level information, but a pairwise comparison needs at least 2. See excluded_profiles.tsv. Either too little of these samples' reads map to the reference genome set, or the set is too small/too strictly filtered (--strain_min_completeness / --strain_max_contamination)." >&2
+        exit 1
+    fi
+
+    echo "inStrain compare: using \$n_usable profile(s); \$(( \$(wc -l < excluded_profiles.tsv) - 1 )) excluded" >&2
+
+    inStrain compare -i \$usable ${args} \\
         -o strain_compare.IS \\
         -p ${task.cpus} \\
         -s ${stb}
@@ -325,6 +360,7 @@ process INSTRAIN_COMPARE {
         > strain_compare.IS/output/strain_compare.IS_genomeWide_compare.tsv
     printf 'genome\\tcluster\\tsample\\n' \\
         > strain_compare.IS/output/strain_compare.IS_strain_clusters.tsv
+    printf 'sample\\treason\\n' > excluded_profiles.tsv
     echo '"${task.process}": {instrain: stub}' > versions.yml
     """
 }
