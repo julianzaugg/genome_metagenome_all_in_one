@@ -113,3 +113,30 @@ can indicate corrupt or malformed FASTQ input, so fix the source reads and resum
 Add `-resume`. Note: Aviary and autocycler are single coarse-grained processes
 (they wrap their own pipelines), so the whole process is the resume unit — their
 internal steps are opaque to Nextflow.
+
+### Pin the session on long runs
+
+A bare `-resume` resumes **the most recent session in that directory**, which is
+not necessarily your last real run. Every `nextflow run` opens a session,
+including ones that execute nothing:
+
+- `nextflow run . --help` — `--help` is a pipeline *parameter*, so this is still a run
+- any launch that dies during config/schema validation
+
+Either will become "the most recent session", and the next bare `-resume` then
+attaches to it, finds an empty cache, and silently re-runs the pipeline from the
+first process. The symptom — early steps like `FASTQ_GZIP_TEST` and `FASTP`
+re-running right after a `git pull` — looks like a code regression but is not.
+
+Check before resuming anything expensive, and pass the session explicitly:
+
+```bash
+nextflow log | tail -5          # confirm the SESSION ID of your last real run
+nextflow run . ... -resume <session-id>
+```
+
+To inspect parameters without opening a session, read [parameters.md](parameters.md)
+or run `nextflow config .` — neither is a `nextflow run`.
+
+`DUMP_SOFTWARE_VERSIONS` re-runs whenever modules are added or removed. That one
+is expected and does not indicate a broken cache.
