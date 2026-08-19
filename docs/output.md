@@ -310,6 +310,18 @@ distance table also yields an empty `strain_clusters.csv`: no comparable pairs i
 real outcome, not an error, so the run continues and the warning is written to the
 task log.
 
+The `MSA file` column names the reference genome each comparison was made against —
+so a sample pair gets one row per shared species, not one row overall. TRACS derives
+that label as `basename.split(".")[0]`, which would truncate our dotted bin names
+(`SG11823.metabat_sspec.26`) to just `SG11823`; the pipeline therefore hands TRACS
+dot-free reference names and restores the originals afterwards, using the mapping in
+`tracs_reference_names.tsv`.
+
+`strain_clusters.csv` clusters **samples**, pooling every reference: single-linkage
+puts two samples together if they are within the threshold on *any* shared genome. It
+answers "do these samples share at least one strain", not "which strain" — read
+`transmission_distances.csv` for the per-genome picture.
+
 Note that `tracs distance` takes an optional `-D`/`--snp_threshold`, and it is a
 **hard** cutoff applied inside pairsnp — pairs further apart than it are never
 emitted. That silently removes exactly the distant-strain pairs needed to tell "these

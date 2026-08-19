@@ -419,13 +419,33 @@ process TRACS_BUILD_DB {
     path(genomes, stageAs: 'genomes/*')
 
     output:
-    path 'strain_db.zip', emit: db
-    path 'versions.yml',  emit: versions
+    path 'strain_db.zip',              emit: db
+    path 'tracs_reference_names.tsv',  emit: name_map
+    path 'versions.yml',               emit: versions
 
     script:
     def args = task.ext.args ?: ''
     """
-    tracs build-db ${args} -i genomes/*.fasta -o strain_db -t ${task.cpus}
+    # TRACS labels each result row with the reference name, derived as
+    # basename.split(".")[0] (distance.py). Our bin names contain dots
+    # ("SG11823.metabat_sspec.26"), so that truncates every reference to just the
+    # sample it was binned from and makes the output column useless. Give TRACS
+    # dot-free names and keep a mapping to restore the real names afterwards.
+    mkdir -p refs
+    printf 'tracs_name\\tgenome\\n' > tracs_reference_names.tsv
+    for f in genomes/*.fasta; do
+        [ -e "\$f" ] || continue
+        orig=\$(basename "\$f" .fasta)
+        safe=\$(printf '%s' "\$orig" | tr '.' '_')
+        if [ -e "refs/\${safe}.fasta" ]; then
+            echo "ERROR: reference name collision after replacing '.' with '_': '\$orig' collides with an earlier genome as '\$safe'. Rename the bins to disambiguate." >&2
+            exit 1
+        fi
+        cp "\$f" "refs/\${safe}.fasta"
+        printf '%s\\t%s\\n' "\$safe" "\$orig" >> tracs_reference_names.tsv
+    done
+
+    tracs build-db ${args} -i refs/*.fasta -o strain_db -t ${task.cpus}
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -436,6 +456,7 @@ process TRACS_BUILD_DB {
     stub:
     """
     touch strain_db.zip
+    printf 'tracs_name\\tgenome\\nrep_1\\trep.1\\n' > tracs_reference_names.tsv
     echo '"${task.process}": {tracs: stub}' > versions.yml
     """
 }
@@ -449,18 +470,21 @@ process TRACS_ALIGN {
     path(db)
 
     output:
-    tuple val(meta), path("${meta.id}_align"), emit: alignment
+    tuple val(meta), path("${meta.id}"), emit: alignment
     path 'versions.yml',                       emit: versions
 
     script:
     def args      = task.ext.args ?: '--minimap_preset sr --keep-all'
     def reads_arg = meta.single_end ? "${reads}" : "${reads[0]} ${reads[1]}"
     """
-    mkdir -p ${meta.id}_align
+    # The output directory name becomes the sample name in every downstream
+    # table (tracs combine takes it as basename of the alignment directory), so
+    # it is exactly meta.id -- no suffix.
+    mkdir -p ${meta.id}
     tracs align ${args} \\
         -i ${reads_arg} \\
         --database ${db} \\
-        -o ${meta.id}_align \\
+        -o ${meta.id} \\
         -p ${meta.id} \\
         -t ${task.cpus}
 
@@ -472,8 +496,8 @@ process TRACS_ALIGN {
 
     stub:
     """
-    mkdir -p ${meta.id}_align
-    printf '>${meta.id}\\nACGT\\n' > ${meta.id}_align/posterior_counts_ref_rep.1.fasta
+    mkdir -p ${meta.id}
+    printf '>${meta.id}\\nACGT\\n' > ${meta.id}/posterior_counts_ref_rep_1.fasta
     echo '"${task.process}": {tracs: stub}' > versions.yml
     """
 }
@@ -538,6 +562,7 @@ process TRACS_DISTANCE {
 
     input:
     path(combined)
+    path(name_map)
 
     output:
     path 'transmission_distances.csv', emit: distances
@@ -562,6 +587,13 @@ process TRACS_DISTANCE {
         --msa ${combined}/*.fasta.gz \\
         -o transmission_distances.csv \\
         -t ${task.cpus}
+
+    # Restore the real genome names in the trailing "MSA file" column.
+    awk -F ',' -v OFS=',' '
+        NR==FNR { if (FNR > 1) { split(\$0, a, "\\t"); map[a[1]] = a[2] } next }
+        FNR==1  { print; next }
+        { if (\$NF in map) \$NF = map[\$NF]; print }
+    ' ${name_map} transmission_distances.csv > renamed.csv && mv renamed.csv transmission_distances.csv
 
     n_pairs=\$(( \$(wc -l < transmission_distances.csv) - 1 ))
     echo "tracs distance: \${n_pairs} pairwise distance(s) written" >&2

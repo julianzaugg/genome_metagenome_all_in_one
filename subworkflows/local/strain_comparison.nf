@@ -132,7 +132,7 @@ workflow STRAIN_COMPARISON {
         // transposes that into one MSA per reference across samples, which is the only
         // form `distance` accepts.
         TRACS_COMBINE(ch_tracs_align.map { _meta, d -> d }.collect())
-        TRACS_DISTANCE(TRACS_COMBINE.out.combined)
+        TRACS_DISTANCE(TRACS_COMBINE.out.combined, TRACS_BUILD_DB.out.name_map)
         TRACS_CLUSTER(TRACS_DISTANCE.out.distances)
 
         ch_tracs_msa_summary = TRACS_COMBINE.out.summary
