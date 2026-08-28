@@ -1,0 +1,33 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://raw.githubusercontent.com/ace/gmaio/main/assets/schema_comparison_reads.json",
+    "title": "gmaio comparison-reads samplesheet",
+    "description": "One row per external comparison sample. These reads are QC'd/host-removed the same way as regular samples, then mapped against the final dereplicated bin representatives and the gene catalogue for comparison purposes -- they are never assembled or binned. Sample IDs must not collide with the main samplesheet's sample IDs.",
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "sample": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Sample name must be provided and contain no spaces",
+                "meta": ["id"]
+            },
+            "fastq_1": {
+                "type": "string",
+                "format": "file-path",
+                "exists": true,
+                "pattern": "^\\S+\\.f(ast)?q\\.gz$",
+                "errorMessage": "fastq_1 must be a path to a gzipped FASTQ (.fastq.gz / .fq.gz)"
+            },
+            "fastq_2": {
+                "type": "string",
+                "format": "file-path",
+                "exists": true,
+                "pattern": "^\\S+\\.f(ast)?q\\.gz$",
+                "errorMessage": "fastq_2 must be a path to a gzipped FASTQ (.fastq.gz / .fq.gz)"
+            }
+        },
+        "required": ["sample", "fastq_1", "fastq_2"]
+    }
+}

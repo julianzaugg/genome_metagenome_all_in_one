@@ -14,6 +14,8 @@ that would otherwise surprise you at runtime. For database setup see
 |-------|---------|---------------|
 | `--mode` | — (required) | Which track to run: `illumina_metagenome`, `nanopore_metagenome`, `illumina_isolate`, `nanopore_isolate`, or `download_dbs`. |
 | `--input` | — | Samplesheet CSV path. Not required for `--mode download_dbs`. |
+| `--comparison_reads` | — | Samplesheet CSV (`sample`, `fastq_1`, `fastq_2`) of external reads to QC/host-remove and map against this run's final dereplicated bin representatives and gene catalogue, for cross-cohort comparison — never assembled or binned. `illumina_metagenome` only. Requires `--skip_binning false --skip_dereplication false`. Sample IDs must not collide with `--input`'s or `--comparison_assemblies`'s. See `docs/output.md`. |
+| `--comparison_assemblies` | — | Samplesheet CSV (`sample`, `assembly`) of external, pre-binned assemblies whose predicted genes are folded into the expanded gene catalogue, for cross-cohort comparison — never binned. `illumina_metagenome` only. Requires `--skip_gene_catalogue false`. Sample IDs must not collide with `--input`'s or `--comparison_reads`'s. See `docs/output.md`. |
 | `--outdir` | `results` | Output directory. |
 | `--publish_dir_mode` | `copy` | Nextflow `publishDir` mode (`symlink`, `link`, `copy`, `move`, …). |
 | `--container_base` | — | Directory holding local `.sif` images for bespoke tools (Aviary, Dorado, GenomeSPOT). See [containers.md](containers.md). |
@@ -52,7 +54,7 @@ default.
 | `--skip_host_removal` | `false` | Cleanifier host-read removal. Requires `--cleanifier_db` or `--host_ref` when enabled (errors otherwise). |
 | `--skip_binning` | `false` | The entire Aviary binning block — and, because they're nested inside it, everything downstream too: CheckM, dereplication, genome read-mapping, taxonomy/QC, and the marker-gene tree. |
 | `--skip_dereplication` | `false` | Cross-sample dereplication (`COVERM_CLUSTER`/`_HQ`/`_HQ_REF`); all bins are used as "representatives" instead. Must be `false` (with `--skip_binning false`) for `--reference_genomes`, `marker_tree_genome_source=hq_representatives`, and `--within_sample_dereplication` other than `none`. |
-| `--skip_gene_catalogue` | `false` | Gene prediction (Pyrodigal on scaffolds) and the whole gene-catalogue subworkflow (CD-HIT clustering, CDS extraction, membership tabulation, optional DRAM annotation, and the expanded catalogue when `--reference_genomes` is set). |
+| `--skip_gene_catalogue` | `false` | Gene prediction (Pyrodigal on scaffolds) and the whole gene-catalogue subworkflow (CD-HIT clustering, CDS extraction, membership tabulation, optional DRAM annotation, and the expanded catalogue when `--reference_genomes`/`--comparison_assemblies` contribute proteins). Must be `false` when `--comparison_assemblies` is set. |
 | `--skip_rpkm` | `false` | The RPKM subworkflow (SingleM-marker-normalized gene-catalogue abundance via DIAMOND blastx). Requires `--skip_qc false` and either `--skip_assembly false` or `--skip_gene_catalogue false` (hard error otherwise). |
 | `--within_sample_dereplication` | `none` | `sample`/`group` enables an independent within-sample or within-group dereplication path, reusing the pooled CheckM reports but clustering only that unit's own bins. Requires `--skip_binning false`. Independent of `--skip_dereplication` — see the schema description for the four across/within combinations. |
 | `--run_nonpareil` | `true` | Nonpareil sequencing-coverage/diversity estimation on host-removed clean reads. |
@@ -61,6 +63,7 @@ default.
 | `--run_tracs` | `false` | TRACS strain/transmission comparison against the same shared reference set (build-db -> align -> combine -> distance -> cluster), giving pairwise SNP distances and transmission clusters. Builds its reference database from the pipeline's own MAGs, so no GTDB download is needed. Requires `--skip_binning false --skip_dereplication false`. Both metagenome modes; the only option for nanopore. |
 | `--reference_genomes_taxonomy` | `false` | Classify `--reference_genomes` with GTDB-Tk alongside the MAGs. Requires `--reference_genomes` and `--skip_taxonomy false`. |
 | `--marker_tree_include_references` | `false` | Place `--reference_genomes` in the marker-gene tree alongside the MAGs. Requires `--reference_genomes` and `--skip_taxonomy false`. |
+| `--reference_genomes_in_catalogue` | `true` | Include `--reference_genomes` proteins in the expanded gene catalogue. Set `false` to keep references dereplication/strain-comparison-only (e.g. when they were themselves derived from `--comparison_assemblies`, to avoid double-counting the same genes). Only meaningful when `--reference_genomes` is set. |
 
 ### Isolate-only (`illumina_isolate` + `nanopore_isolate`)
 
@@ -181,4 +184,14 @@ nextflow run . -profile bunya --mode illumina_metagenome \
 nextflow run . -profile bunya --mode illumina_isolate \
   --input samplesheet.csv --outdir results \
   --run_parsnp false --run_panaroo false
+
+# Follow-up cohort: map its reads against this run's bins/gene catalogue, and fold a
+# prior study's assemblies' genes into the expanded catalogue -- without assembling
+# or binning either external dataset. References here were derived from the same
+# comparison assemblies, so they're excluded from the catalogue to avoid double-counting.
+nextflow run . -profile bunya --mode illumina_metagenome \
+  --input samplesheet.csv --outdir results \
+  --reference_genomes refs/ --reference_genomes_in_catalogue false \
+  --comparison_reads comparison_reads.csv \
+  --comparison_assemblies comparison_assemblies.csv
 ```

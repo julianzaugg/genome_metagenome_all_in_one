@@ -22,6 +22,20 @@
                     "schema": "assets/schema_input.json",
                     "description": "Path to the samplesheet CSV (not required for --mode download_dbs)."
                 },
+                "comparison_reads": {
+                    "type": "string",
+                    "format": "file-path",
+                    "mimetype": "text/csv",
+                    "schema": "assets/schema_comparison_reads.json",
+                    "description": "Samplesheet of external reads (sample, fastq_1, fastq_2) to QC/host-remove and map against this run's final dereplicated bin representatives and gene catalogue, for cross-cohort comparison -- never assembled or binned. illumina_metagenome only. Sample IDs must not collide with --input's or --comparison_assemblies's."
+                },
+                "comparison_assemblies": {
+                    "type": "string",
+                    "format": "file-path",
+                    "mimetype": "text/csv",
+                    "schema": "assets/schema_comparison_assemblies.json",
+                    "description": "Samplesheet of external, pre-binned assemblies (sample, assembly) whose genes are folded into the expanded gene catalogue, for cross-cohort comparison -- never binned. illumina_metagenome only. Sample IDs must not collide with --input's or --comparison_reads's."
+                },
                 "outdir": {
                     "type": "string",
                     "format": "directory-path",
@@ -84,6 +98,7 @@
                 "reference_genome_extension": { "type": "string", "default": "fasta,fa,fna,fasta.gz,fa.gz,fna.gz", "description": "Comma-separated file extensions to glob under reference_genomes (gzipped inputs are decompressed)." },
                 "reference_genomes_checkm2": { "type": "string", "format": "file-path", "description": "Optional CheckM2 quality_report.tsv for the reference genomes; every reference must appear in it or the run fails. If unset, CheckM2 is run on the references." },
                 "reference_genomes_taxonomy": { "type": "boolean", "default": false, "description": "Classify the reference genomes with GTDB-Tk. They are renamed with a reserved prefix before GTDB-Tk (to avoid GCA_/GCF_ accession collisions) and appear in the published GTDB-Tk summary with their original names restored (metagenome modes)." },
+                "reference_genomes_in_catalogue": { "type": "boolean", "default": true, "description": "Include reference_genomes proteins in the expanded gene catalogue. Set false to keep references out of the catalogue (e.g. dereplication/strain comparison only) while still using --comparison_assemblies for catalogue expansion -- avoids double-counting when the references were themselves derived from the comparison assembly. Only meaningful when reference_genomes is set (metagenome modes)." },
                 "download_db":         { "type": "string", "description": "Comma-list of DB names to download (or 'all'), written under db_outdir. Only used with --mode download_dbs." },
                 "db_outdir":           { "type": "string", "default": "databases", "description": "Where --mode download_dbs writes." }
             }

@@ -15,23 +15,45 @@ Concise guide for working in this repo. Keep this file minimal.
 - `modules/nf-core/` — installed via `nf-core modules install`.
 - `bin/` — helper scripts (python/R), on `PATH` inside processes.
 - `conf/` — `base`, `modules` (ext.args + publishDir), `containers`, `bunya`, `bunya_gpu`, `local`, `test`.
-- `assets/schema_input.json` — samplesheet validation. `nextflow_schema.json` — params.
+- `assets/schema_*.json` — samplesheet validation (main + `--comparison_reads` /
+  `--comparison_assemblies`). `nextflow_schema.json` — params.
 
 ## Run
+Use Nextflow **25.04.x** (matches Bunya and the Linux server). Pin locally with
+`export NXF_VER=25.04.6`. The config is already migrated to the modern idioms
+(`process.resourceLimits`, no `new Date()`), so it parses under Nextflow **26+**'s
+strict config parser. The **scripts** are not yet migrated, though — 26+'s strict
+script parser rejects e.g. the `switch` in `main.nf` — so on 26+ run with
+`NXF_SYNTAX_PARSER=v1` until the `.nf` files are migrated too.
 ```bash
-# wiring check, no real tools
+# wiring check, no real tools (needs DB params set, e.g. on a server)
 nextflow run . -profile test,local --mode illumina_metagenome \
   --input assets/samplesheets/illumina_metagenome.csv -stub
+# laptop check without databases: skip the steps that require reference DBs
+nextflow run . -profile test,local --mode illumina_metagenome \
+  --input assets/samplesheets/illumina_metagenome.csv -stub \
+  --skip_host_removal true --skip_assembly true --skip_binning true \
+  --skip_gene_catalogue true --skip_mobile_elements true --skip_rpkm true
 # laptop/Codex local check: avoid the Nextflow 23.10.1 wrapper + Java 21 issue
 NXF_PLUGINS_MODE=prod NXF_PLUGINS_DIR=$HOME/.nextflow/plugins \
   java -jar $HOME/.nextflow/framework/24.10.5/nextflow-24.10.5-one.jar run . \
   -profile test,local --mode illumina_metagenome \
   --input assets/samplesheets/illumina_metagenome.csv -stub \
   --skip_host_removal true --skip_assembly true --skip_binning true \
-  --skip_gene_catalogue true --skip_mobile_elements true
+  --skip_gene_catalogue true --skip_mobile_elements true --skip_rpkm true
 # real
 nextflow run . -profile bunya --mode <mode> --input samplesheet.csv --outdir results
 ```
+
+## Output directory numbering (`conf/modules.config`)
+All `publishDir` paths use a `NN_name` prefix. Numbers must be unique **within
+each mode** (metagenome and isolate run separately, so they can reuse numbers).
+After adding or renaming any `publishDir`, verify no prefix collision exists:
+```bash
+grep -oP '\d{2,3}_\w+' conf/modules.config | sort -V | uniq -c | sort -rn | awk '$1>1'
+```
+A non-empty result means a collision — renumber to resolve before committing.
+Update `docs/output.md` to match whenever numbers change.
 
 ## Conventions
 - Tool flags live in `conf/modules.config` as `ext.args`, never hard-coded in process bodies.

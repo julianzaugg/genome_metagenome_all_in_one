@@ -1,0 +1,26 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://raw.githubusercontent.com/ace/gmaio/main/assets/schema_comparison_assemblies.json",
+    "title": "gmaio comparison-assemblies samplesheet",
+    "description": "One row per external pre-binned assembly. Genes are predicted (pyrodigal) and folded into the expanded gene catalogue for comparison purposes -- these assemblies are never binned. Sample IDs must not collide with the main samplesheet's or the comparison-reads samplesheet's sample IDs.",
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "sample": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Sample name must be provided and contain no spaces",
+                "meta": ["id"]
+            },
+            "assembly": {
+                "type": "string",
+                "format": "file-path",
+                "exists": true,
+                "pattern": "^\\S+\\.f(ast)?a(\\.gz)?$",
+                "errorMessage": "assembly must be a path to a FASTA of assembled contigs (.fasta / .fa, optionally .gz)"
+            }
+        },
+        "required": ["sample", "assembly"]
+    }
+}

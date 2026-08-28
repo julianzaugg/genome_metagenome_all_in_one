@@ -28,9 +28,9 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 10_coverm_scaffolds/    # per-sample coverage/counts + bam + mapping_assessment.tsv[_per_genome] vs assembled scaffolds
 11_pyrodigal/           # predicted proteins/genes per assembly
 12_gene_catalogue/      # cd-hit catalogue(s) + nucleotide CDS + membership (provenance)
-12_gene_catalogue_expanded/ # as 12_gene_catalogue but scaffold + reference-genome proteins (if --reference_genomes)
+12_gene_catalogue_expanded/ # as 12_gene_catalogue but scaffold proteins + reference-genome and/or comparison-assembly proteins (if --reference_genomes and reference_genomes_in_catalogue, and/or --comparison_assemblies)
 13_dram/                # DRAM functional annotation of the catalogue (annotated in parallel chunks, merged)
-13_dram_expanded/       # DRAM functional annotation of the expanded catalogue (if --reference_genomes)
+13_dram_expanded/       # DRAM functional annotation of the expanded catalogue (if the expanded catalogue is built)
 14_dram_bins/           # per-bin DRAM annotation + combined cross-MAG distillate in all_bins/ (if --run_dram_bins)
 15_gtdbtk/              # GTDB-Tk classification of all bins (+ references if --reference_genomes_taxonomy / --marker_tree_include_references)
 16_checkm1/             # CheckM1 on all bins (if --run_checkm1) — also feeds HQ selection
@@ -41,12 +41,14 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 21_checkv/              # CheckV quality of pooled viruses
 22_checkv_clustering/   # ANI clusters (virus + plasmid)
 23_rpkm/                # SingleM-normalized RPKM for the gene catalogue
-23_rpkm_expanded/       # RPKM for the expanded catalogue; reuses 23_rpkm's SingleM marker blast (if --reference_genomes)
+23_rpkm_expanded/       # RPKM for the expanded catalogue; reuses 23_rpkm's SingleM marker blast (if the expanded catalogue is built)
 24_marker_tree/         # MAG + GTDB-reference marker-gene tree (if --run_marker_tree)
 25_reference_genomes/   # normalised reference FASTAs, their CheckM2 report, predicted proteins, USERREF_-prefixed copies for GTDB-Tk (if --reference_genomes)
 26_strain_reference/    # genomes used for strain comparison + audit table, combined FASTA, .stb (if --run_instrain / --run_tracs)
 27_instrain/            # inStrain profiles, compare output, and strain-sharing summary tables (if --run_instrain)
 28_tracs/               # TRACS reference db, pairwise SNP/transmission distances, strain clusters (if --run_tracs)
+29_comparison_reads/    # external reads (--comparison_reads): QC/host-removed reads, sylph/singlem profiles, mapping vs the final bin representatives, RPKM vs the gene catalogue (if --comparison_reads)
+30_comparison_assemblies/ # predicted proteins/genes per external assembly, feeding the expanded gene catalogue (if --comparison_assemblies)
 pipeline_info/          # timeline / report / trace / dag
 ```
 
@@ -194,12 +196,24 @@ read QC and assembly directories:
 
 The `--reference_genomes` feature applies to both metagenome tracks: references are
 dereplicated with the HQ MAGs (`08_dereplicated_hq_ref_bins/`), reads are mapped to
-that set (`09_coverm_hq_ref_bins/`), and reference proteins are added to an expanded
-gene catalogue (`12_gene_catalogue_expanded/` + `13_dram_expanded/`). RPKM for the
-expanded catalogue (`23_rpkm_expanded/`) is Illumina-only, and reuses the SingleM
-marker blast from `23_rpkm/` (only the gene-catalogue blast is recomputed). References
-are scored with CheckM2 (a report is generated, or supply one with
-`--reference_genomes_checkm2`, in which case every reference must appear in it).
+that set (`09_coverm_hq_ref_bins/`), and — if `--reference_genomes_in_catalogue` is
+true (the default) — reference proteins are added to an expanded gene catalogue
+(`12_gene_catalogue_expanded/` + `13_dram_expanded/`). RPKM for the expanded catalogue
+(`23_rpkm_expanded/`) is Illumina-only, and reuses the SingleM marker blast from
+`23_rpkm/` (only the gene-catalogue blast is recomputed). References are scored with
+CheckM2 (a report is generated, or supply one with `--reference_genomes_checkm2`, in
+which case every reference must appear in it).
+
+`--comparison_reads` and `--comparison_assemblies` (illumina_metagenome only) are a
+separate, independent way to expand the MAG/gene database for cross-cohort comparison
+-- see `29_comparison_reads/` and `30_comparison_assemblies/` below. Unlike
+`--reference_genomes`, neither is dereplicated with the MAGs or classified with
+GTDB-Tk: comparison reads are only ever mapped as a query against this run's own bin
+representatives and gene catalogue, and comparison assemblies only ever contribute
+genes to the expanded catalogue. `--reference_genomes_in_catalogue false` lets you
+exclude `--reference_genomes` from the expanded catalogue while still using it for
+dereplication/strain comparison -- e.g. when the references were themselves derived
+from the `--comparison_assemblies` data, to avoid counting the same genes twice.
 
 Isolate workflows publish assembly, QC, annotation, mobile-element, mapping, and
 comparative outputs under their tool names. Key directories:
@@ -364,6 +378,37 @@ use `--run_tracs`, which supports `map-ont` natively.
   inStrain's `--database_mode` exists to acknowledge exactly this. It is standard for any
   map-to-dereplicated-MAGs design, not a defect of this setup.
 
+## Comparison reads and comparison assemblies (`29_comparison_reads/`, `30_comparison_assemblies/`)
+
+Opt-in via `--comparison_reads <samplesheet>` (sample, fastq_1, fastq_2) and/or
+`--comparison_assemblies <samplesheet>` (sample, assembly) — illumina_metagenome only.
+Both let you compare a second dataset (a different cohort, public data, an earlier
+study) against what this run recovered, without asking the pipeline to assemble or
+bin that dataset. The two are independent: samples need not correspond to each other,
+and either can be used alone. Sample IDs across `--input`, `--comparison_reads`, and
+`--comparison_assemblies` must all be distinct — they share output directories keyed
+by sample id.
+
+`29_comparison_reads/` mirrors the main sample path for QC (`fastp/`) and host removal
+(`host_removed/`), gated by the same `--skip_qc`/`--skip_host_removal` as regular
+samples, and raw-read community profiling (`sylph/`, `singlem/`), gated by the same
+`--skip_sylph`/`--skip_singlem`. `bin_mapping/` is CoverM mapping against this run's
+final dereplicated bin representatives (the same set `09_coverm_bins/` maps the main
+samples to) plus the same bases-mapped assessment (unless `--skip_mapping_assessment`).
+`gene_catalogue_mapping/` is the same DIAMOND-blastx-then-SingleM-normalize approach as
+`23_rpkm/`, run separately against whichever gene catalogue tier is in play (the
+expanded one if `--reference_genomes`/`--comparison_assemblies` built one, otherwise
+the samples-only one) — its own SingleM marker blast is recomputed, since it's a
+different set of reads.
+
+`30_comparison_assemblies/` holds pyrodigal output (`.faa`/`.fna`/`.gff`) per external
+assembly — nothing else runs on these assemblies (no binning, no dereplication). Their
+proteins feed the expanded gene catalogue (`12_gene_catalogue_expanded/`) alongside
+scaffold proteins and, if enabled, `--reference_genomes` proteins — see the per-source
+toggle note above (`--reference_genomes_in_catalogue`). If `--comparison_assemblies`
+is set while `--reference_genomes` is unset, the expanded catalogue still gets built
+(samples + comparison-assembly genes only).
+
 ## Provenance
 
 - `08_dereplicated_bins/cluster_definition.tsv` — which bins collapsed into each
@@ -380,5 +425,8 @@ use `--run_tracs`, which supports `map-ont` natively.
   including references and the chosen Parsnp reference.
 - `19_chewbacca/<group>_chewbbaca/genome_hash_map.tsv` — mapping from original
   genome ids to chewBBACA-safe FASTA names.
+- `12_gene_catalogue_expanded/gene_catalogue_membership.tsv` — as above, but for the
+  expanded catalogue; genes namespaced by their `--comparison_assemblies` sample id
+  are how you tell which catalogue clusters came from the comparison data.
 
 Paths/numbers are set in `conf/modules.config` and easily changed.

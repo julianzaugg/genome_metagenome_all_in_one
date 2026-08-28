@@ -19,3 +19,9 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   sample/reference comparison manifests and overlapping comparison groups.
 - Containers-only config; profiles `bunya`, `bunya_gpu`, `local`, `test`.
 - Reference-database params + optional `download_dbs` entry workflow.
+- `--comparison_reads` / `--comparison_assemblies` (illumina_metagenome): map
+  external reads against this run's final bin representatives and gene catalogue,
+  and fold external pre-binned assemblies' genes into an expanded gene catalogue,
+  for cross-cohort comparison without assembling or binning either dataset.
+  `--reference_genomes_in_catalogue` independently toggles whether
+  `--reference_genomes` also feeds that expanded catalogue.

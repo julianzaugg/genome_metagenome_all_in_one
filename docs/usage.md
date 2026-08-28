@@ -77,6 +77,33 @@ de-duplicated by `id`, then expanded into each requested group. chewBBACA input
 genome names longer than its practical limit are hashed, and the mapping is
 published with the chewBBACA outputs.
 
+### Comparison samplesheets (`illumina_metagenome` only)
+
+Two optional, independent samplesheets let you compare a second dataset against
+this run's own results without assembling or binning it — see
+[output.md](output.md#comparison-reads-and-comparison-assemblies-29_comparison_reads-30_comparison_assemblies)
+for what each produces.
+
+`--comparison_reads reads.csv` — one row per external sample to QC/host-remove and
+map:
+
+| Column     | Required | Notes |
+|------------|----------|-------|
+| `sample`   | yes      | unique id — must not collide with `--input` or `--comparison_assemblies` |
+| `fastq_1`  | yes      | gzipped FASTQ |
+| `fastq_2`  | yes      | gzipped FASTQ |
+
+`--comparison_assemblies assemblies.csv` — one row per external, pre-binned assembly
+to predict genes from:
+
+| Column     | Required | Notes |
+|------------|----------|-------|
+| `sample`   | yes      | unique id — must not collide with `--input` or `--comparison_reads` |
+| `assembly` | yes      | assembly FASTA (contigs/scaffolds), optionally gzipped |
+
+Either can be used alone, and rows in one need not correspond to rows in the other
+or in the main samplesheet.
+
 ## Turning steps on/off
 
 Steps are toggled with `--skip_*` / `--run_*` params, e.g.

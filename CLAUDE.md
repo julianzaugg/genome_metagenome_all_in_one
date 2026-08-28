@@ -15,7 +15,8 @@ Concise guide for working in this repo. Keep this file minimal.
 - `modules/nf-core/` — installed via `nf-core modules install`.
 - `bin/` — helper scripts (python/R), on `PATH` inside processes.
 - `conf/` — `base`, `modules` (ext.args + publishDir), `containers`, `bunya`, `bunya_gpu`, `local`, `test`.
-- `assets/schema_input.json` — samplesheet validation. `nextflow_schema.json` — params.
+- `assets/schema_*.json` — samplesheet validation (main + `--comparison_reads` /
+  `--comparison_assemblies`). `nextflow_schema.json` — params.
 
 ## Run
 Use Nextflow **25.04.x** (matches Bunya and the Linux server). Pin locally with

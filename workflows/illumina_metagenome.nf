@@ -16,6 +16,7 @@
  */
 
 include { INPUT_CHECK }        from '../subworkflows/local/input_check'
+include { INPUT_CHECK as COMPARISON_INPUT_CHECK } from '../subworkflows/local/input_check'
 include { READ_PROFILING }     from '../subworkflows/local/read_profiling'
 include { HOST_REMOVAL }       from '../subworkflows/local/host_removal'
 include { REFERENCE_GENOMES }  from '../subworkflows/local/reference_genomes'
@@ -25,6 +26,8 @@ include { MARKER_GENE_TREE }   from '../subworkflows/local/marker_gene_tree'
 include { STRAIN_COMPARISON }  from '../subworkflows/local/strain_comparison'
 include { MOBILE_ELEMENTS }    from '../subworkflows/local/mobile_elements'
 include { RPKM }               from '../subworkflows/local/rpkm'
+include { COMPARISON_ASSEMBLIES } from '../subworkflows/local/comparison_assemblies'
+include { COMPARISON_READS }      from '../subworkflows/local/comparison_reads'
 
 include { FASTP }                       from '../modules/nf-core/fastp/main'
 include { SPADES }                      from '../modules/nf-core/spades/main'
@@ -90,6 +93,12 @@ workflow ILLUMINA_METAGENOME {
         if (params.strain_genome_source == 'hq_ref_representatives' && !params.reference_genomes) {
             error "--strain_genome_source hq_ref_representatives dereplicates the HQ MAGs together with external references. Set --reference_genomes, or choose another --strain_genome_source."
         }
+    }
+    if (params.comparison_assemblies && params.skip_gene_catalogue) {
+        error "--comparison_assemblies feeds the expanded gene catalogue, which needs the gene catalogue enabled. Rerun with --skip_gene_catalogue false, or unset --comparison_assemblies."
+    }
+    if (params.comparison_reads && (params.skip_binning || params.skip_dereplication)) {
+        error "--comparison_reads maps external reads to the final dereplicated bin representatives, which needs binning + dereplication. Rerun with --skip_binning false --skip_dereplication false, or unset --comparison_reads."
     }
 
     INPUT_CHECK(params.input, params.mode)
@@ -454,22 +463,79 @@ workflow ILLUMINA_METAGENOME {
         }
     }
 
-    // --- Gene catalogue (from scaffold proteins) ---
+    // --- Gene catalogue (from scaffold proteins, + optional external gene sources) ---
+    // build_expanded_catalogue also gates RPKM's expanded-catalogue arg and
+    // COMPARISON_READS's gene-mapping target below, so it's computed regardless
+    // of skip_gene_catalogue.
+    def build_expanded_catalogue = (params.reference_genomes && params.reference_genomes_in_catalogue) ||
+                                    (params.comparison_assemblies as boolean)
     if (!params.skip_gene_catalogue) {
         PYRODIGAL_SCAFFOLDS(ch_assembly)
+
+        // Each extra gene source (references, comparison assemblies) is independently
+        // toggled: --reference_genomes_in_catalogue lets references feed dereplication/
+        // strain comparison without also feeding the catalogue (e.g. when they were
+        // themselves derived from the comparison assembly, to avoid double-counting).
+        ch_catalogue_extra_faa = Channel.empty()
+        ch_catalogue_extra_fna = Channel.empty()
+        if (params.reference_genomes && params.reference_genomes_in_catalogue) {
+            ch_catalogue_extra_faa = ch_catalogue_extra_faa.mix(REFERENCE_GENOMES.out.faa)
+            ch_catalogue_extra_fna = ch_catalogue_extra_fna.mix(REFERENCE_GENOMES.out.fna)
+        }
+        if (params.comparison_assemblies) {
+            COMPARISON_ASSEMBLIES(params.comparison_assemblies)
+            ch_catalogue_extra_faa = ch_catalogue_extra_faa.mix(COMPARISON_ASSEMBLIES.out.faa)
+            ch_catalogue_extra_fna = ch_catalogue_extra_fna.mix(COMPARISON_ASSEMBLIES.out.fna)
+            ch_versions = ch_versions.mix(COMPARISON_ASSEMBLIES.out.versions)
+        }
+
         GENE_CATALOGUE(
             PYRODIGAL_SCAFFOLDS.out.faa,
             PYRODIGAL_SCAFFOLDS.out.fna,
             params.catalogue_identities,
             optpath(params.dram_db),
             !params.skip_annotation,
-            params.reference_genomes ? REFERENCE_GENOMES.out.faa : Channel.empty(),
-            params.reference_genomes ? REFERENCE_GENOMES.out.fna : Channel.empty(),
-            params.reference_genomes as boolean
+            ch_catalogue_extra_faa,
+            ch_catalogue_extra_fna,
+            build_expanded_catalogue
         )
         ch_versions = ch_versions
             .mix(PYRODIGAL_SCAFFOLDS.out.versions)
             .mix(GENE_CATALOGUE.out.versions)
+    }
+
+    // --- Comparison reads (external reads mapped against this run's bins + gene
+    // catalogue, never assembled/binned themselves) ---
+    if (params.comparison_reads) {
+        if (params.skip_gene_catalogue) {
+            log.info "comparison_reads: gene-catalogue mapping skipped (--skip_gene_catalogue true); bin mapping and community profiling still run."
+        }
+        COMPARISON_INPUT_CHECK(params.comparison_reads, params.mode)
+        ch_comparison_gene_catalogue = params.skip_gene_catalogue ? [] :
+            (build_expanded_catalogue ? GENE_CATALOGUE.out.expanded_catalogue : GENE_CATALOGUE.out.catalogue)
+        COMPARISON_READS(
+            COMPARISON_INPUT_CHECK.out.reads_short,
+            !params.skip_qc,
+            !params.skip_host_removal,
+            params.skip_host_removal ? Channel.value([]) : ch_cleanifier_index,
+            !params.skip_sylph,
+            !params.skip_sylph && params.sylph_tax_metadata != null,
+            Channel.fromPath(params.sylph_db, checkIfExists: true).collect(),
+            ch_sylph_tax_meta,
+            !params.skip_singlem,
+            file(params.singlem_metapackage, checkIfExists: true),
+            !params.skip_dereplication && !params.skip_read_mapping,
+            ch_reps,
+            !params.skip_mapping_assessment,
+            !params.skip_gene_catalogue,
+            ch_comparison_gene_catalogue,
+            optpath(params.rpkm_singlem_marker_dbs),
+            optpath(params.rpkm_singlem_marker_lengths),
+            params.rpkm_min_read_length
+        )
+        ch_versions = ch_versions
+            .mix(COMPARISON_INPUT_CHECK.out.versions)
+            .mix(COMPARISON_READS.out.versions)
     }
 
     // --- RPKM (selected stream only: host-filtered fastp reads, or fastp reads if host removal is skipped) ---
@@ -482,7 +548,7 @@ workflow ILLUMINA_METAGENOME {
             optpath(params.rpkm_singlem_marker_dbs),
             optpath(params.rpkm_singlem_marker_lengths),
             params.rpkm_min_read_length,
-            params.reference_genomes ? GENE_CATALOGUE.out.expanded_catalogue : []
+            build_expanded_catalogue ? GENE_CATALOGUE.out.expanded_catalogue : []
         )
         ch_versions = ch_versions.mix(RPKM.out.versions)
     }
