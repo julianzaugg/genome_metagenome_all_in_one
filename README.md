@@ -1,5 +1,9 @@
 # gmaio — genome & metagenome all-in-one
 
+> Personal pipeline for my own metagenomics/genomics work, built around ACE's
+> Bunya HPC setup. Not an officially maintained or supported tool - expect it
+> to change without notice.
+
 A single Nextflow (DSL2) pipeline consolidating four analysis tracks:
 
 | `--mode`               | Platform | Sample type | Status (v1)        |
