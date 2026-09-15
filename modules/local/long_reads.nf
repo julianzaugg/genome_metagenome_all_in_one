@@ -90,7 +90,7 @@ process PORECHOP {
     script:
     def args = task.ext.args ?: ''
     """
-    porechop ${args} -i ${reads} -o ${meta.id}.porechop.fastq.gz
+    porechop ${args} -t ${task.cpus} -i ${reads} -o ${meta.id}.porechop.fastq.gz
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
