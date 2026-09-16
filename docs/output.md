@@ -52,6 +52,53 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 pipeline_info/          # timeline / report / trace / dag
 ```
 
+Nanopore metagenome layout (`conf/modules.config`'s `mg()` helper): the QC
+front-end is 3 steps (dorado_basecall → porechop → fastplong) instead of
+Illumina's 1 (fastp), and assembly is 2 steps (myloasm → dorado_polish)
+instead of 1 (metaspades) — so every stage the two modes share is offset
+from the Illumina numbers above: **+2** up to and including host removal,
+**+3** from Aviary onward. RPKM (`23_rpkm`) and the comparison_reads /
+comparison_assemblies family (`29`/`30` above) aren't wired up for this mode
+yet, so those numbers don't appear here:
+
+```
+00_read_stats/
+01_dorado_basecall/     # Dorado basecalling + demultiplexing (if --force_dorado_basecalling, or a POD5 sample has no long_reads)
+02_porechop/            # adapter-trimmed reads (unless --skip_porechop)
+03_fastplong/           # length/quality-filtered reads (unless --skip_qc)
+04_sylph/               # sylph combined profile
+05_singlem/             # multi-sample SingleM profile + OTU table
+06_host_removed/        # host-filtered reads
+07_myloasm/             # assemblies (scaffolds)
+08_dorado_polish/       # Dorado-polished assemblies (unless --skip_dorado_polish)
+09_aviary/              # Aviary recovery; all_aviary_bins/ is the renamed canonical bin set
+10_checkm2/             # CheckM2 on all bins (drives dereplication + HQ selection)
+11_dereplicated_bins/ / 11_dereplicated_hq_bins/ / 11_dereplicated_hq_ref_bins/ / 11_within_sample_dereplicated_[hq_]bins/<id>/
+12_coverm_bins/ / 12_coverm_hq_bins/ / 12_coverm_hq_derep_bins/ / 12_coverm_hq_ref_bins/ / 12_coverm_within_sample_[hq_]derep_bins/
+13_coverm_scaffolds_nanopore/ # per-sample coverage/counts + bam + mapping_assessment.tsv[_per_genome] vs assembled scaffolds
+14_pyrodigal/
+15_gene_catalogue/ / 15_gene_catalogue_expanded/
+16_dram/ / 16_dram_expanded/
+17_dram_bins/
+18_gtdbtk/
+19_checkm1/
+20_nonpareil/
+21_genomespot/
+22_barrnap/
+23_genomad/
+24_checkv/
+25_checkv_clustering/
+27_marker_tree/         # (if --run_marker_tree)
+28_reference_genomes/   # (if --reference_genomes)
+29_strain_reference/    # (if --run_tracs; --run_instrain errors out for this mode)
+30_instrain/            # never populated in this mode
+31_tracs/               # (if --run_tracs)
+pipeline_info/
+```
+
+See the Illumina descriptions above for what each directory's contents mean —
+they're identical, only the numbering differs.
+
 `24_marker_tree/` (opt-in via `--run_marker_tree`) holds, per domain
 (`bac120`/`ar53`): `<domain>.marker_msa.fasta` (placed genomes + selected
 references, from the GTDB-Tk marker alignment), `<domain>.treefile` (VeryFastTree
