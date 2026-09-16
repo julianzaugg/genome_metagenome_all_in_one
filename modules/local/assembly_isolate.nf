@@ -60,9 +60,9 @@ process MYLOASM {
     """
     mkdir -p ${meta.id}
     myloasm ${args} \\
-        --reads ${reads} \\
         --threads ${task.cpus} \\
-        --output ${meta.id}
+        --output-dir ${meta.id} \\
+        ${reads}
 
     assembly=\$(find ${meta.id} -type f \\( -name '*.fasta' -o -name '*.fa' -o -name '*.fna' \\) | head -1)
     if [[ -z "\$assembly" ]]; then
