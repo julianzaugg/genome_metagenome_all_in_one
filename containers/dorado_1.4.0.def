@@ -1,0 +1,50 @@
+Bootstrap: docker
+From: mambaorg/micromamba:1.5.8
+
+# Dorado, downloaded FROM OXFORD NANOPORE'S OWN CDN.
+#
+# Why not a biocontainer or a `docker://` pull: Dorado is ONT-proprietary and
+# distributed only from ONT's own CDN under ONT's terms -- there is no
+# bioconda/biocontainer package and no image we're allowed to redistribute via
+# Docker Hub or similar. This recipe downloads the official release tarball
+# at build time instead, so every build always fetches directly from ONT.
+#
+# The tarball is a self-contained binary (bundles its own CUDA runtime); it
+# only needs the host's NVIDIA driver at run time for GPU use (CUDA driver
+# >=525.105 for v1.4.0), supplied via `apptainer.runOptions = '--nv'`
+# (see conf/bunya_gpu.config). For --device cpu, no GPU driver is needed at
+# all -- Dorado only dlopen's libcuda when a GPU is detected.
+#
+# samtools is installed alongside Dorado in the same image because
+# DORADO_POLISH pipes `dorado aligner | samtools sort` and then runs
+# `samtools index` before polishing (see modules/local/long_reads.nf).
+
+%post
+    set -eu
+
+    DORADO_VERSION="1.4.0"
+    DORADO_URL="https://cdn.oxfordnanoportal.com/software/analysis/dorado-${DORADO_VERSION}-linux-x64.tar.gz"
+
+    micromamba install -y -n base -c conda-forge -c bioconda \
+        samtools ca-certificates curl procps-ng
+    micromamba clean -ay
+
+    export PATH=/opt/conda/bin:$PATH
+
+    curl -fsSL -o /tmp/dorado.tar.gz "$DORADO_URL"
+    tar -xzf /tmp/dorado.tar.gz -C /opt
+    rm -f /tmp/dorado.tar.gz
+    mv "/opt/dorado-${DORADO_VERSION}-linux-x64" /opt/dorado
+
+    # Fail the build here rather than hours into a pipeline run.
+    /opt/dorado/bin/dorado --version
+    samtools --version | head -1
+    command -v ps >/dev/null || { echo "MISSING: ps (procps-ng)" >&2; exit 1; }
+    echo "dorado build OK (${DORADO_VERSION})"
+
+%environment
+    export PATH=/opt/dorado/bin:/opt/conda/bin:$PATH
+    export LC_ALL=C
+
+%runscript
+    exec dorado "$@"

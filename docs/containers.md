@@ -28,7 +28,7 @@ self-contained for this pipeline, need local images:
 | Image (`<name>.sif`)   | Why a local image | Used by |
 |------------------------|-------------------|---------|
 | `aviary_0.13.0`        | Aviary 0.13.0 requires `pixi` and prebuilt pixi environments; the quay.io biocontainer has the CLI but not `pixi` | metagenome bin recovery |
-| `dorado_1.4.0`         | ONT-proprietary, not on biocontainers | Nanopore basecall/polish |
+| `dorado_1.4.0`         | ONT-proprietary, not on biocontainers (see Dorado SIF below) | Nanopore basecall/polish |
 | `genomespot_1.0`       | not packaged on biocontainers | bin growth prediction (optional) |
 | `tracs_1.1.1`          | **only if the biocontainer SIGILLs on your CPU** — upstream compiles with `-march=native`, so the published image is not portable (see below) | strain comparison (`--run_tracs`) |
 
@@ -201,6 +201,46 @@ lscpu | grep -oE 'avx[0-9a-z_]+' | sort -u     # what your CPU actually supports
 inStrain is unaffected — it is pure Python plus pysam. If TRACS blocks you, run
 with `--run_instrain true --run_tracs false` and add TRACS once the image is
 built.
+
+### Dorado SIF
+
+Dorado has no biocontainer and no image we can pull from Docker Hub: it is
+ONT-proprietary, distributed only from ONT's own CDN under ONT's terms. Build
+it locally from the checked-in recipe, which downloads the official release
+tarball at build time:
+
+```bash
+apptainer build containers/dorado_1.4.0.sif containers/dorado_1.4.0.def
+```
+
+**Verify:**
+
+```bash
+apptainer exec containers/dorado_1.4.0.sif dorado --version
+apptainer exec containers/dorado_1.4.0.sif samtools --version
+```
+
+The build itself needs no GPU — it only downloads and extracts the tarball —
+but it does need network egress to `cdn.oxfordnanoportal.com`.
+
+**GPU vs CPU.** The Dorado binary bundles its own CUDA runtime and only
+`dlopen`s the driver's `libcuda.so` when it detects a GPU, so:
+- For GPU use, the host needs an NVIDIA driver supporting CUDA driver
+  ≥525.105 (for v1.4.0); GPU passthrough is already handled by
+  `apptainer.runOptions = '--nv'` in `-profile bunya_gpu`.
+- For CPU-only use (e.g. a local server with no GPU), set
+  `--dorado_device cpu` explicitly (the default `auto` may still probe for a
+  GPU). No driver, no `--nv`, and no `bunya_gpu` profile are needed in this
+  case — the `local`/`bunya` profiles are sufficient.
+
+**Rebuild for a newer version:** edit `DORADO_VERSION` in
+`containers/dorado_1.4.0.def`, rebuild to a new filename
+(`containers/dorado_<version>.sif`), and update the container path in
+`conf/containers.config`'s `DORADO_.*` block — or point at it without editing
+the pipeline via `--dorado_container /path/to/dorado_<version>.sif`.
+
+If your image lives elsewhere, pass `--dorado_container /path/to/dorado_1.4.0.sif`
+or set that parameter in a profile.
 
 ## Apptainer config
 

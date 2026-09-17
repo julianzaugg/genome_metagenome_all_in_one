@@ -67,6 +67,10 @@
                 "tracs_container": {
                     "type": "string",
                     "description": "Optional explicit TRACS .sif path. If unset, TRACS_* use the quay.io biocontainer. Needed only when that image crashes with exit status 132 (SIGILL): TRACS compiles with -march=native, so the published build is tied to bioconda's build-host CPU. Build containers/tracs_1.1.1.def on the compute host -- see docs/containers.md."
+                },
+                "dorado_container": {
+                    "type": "string",
+                    "description": "Optional explicit Dorado .sif path. If unset, DORADO_* uses ${container_base}/dorado_1.4.0.sif. Dorado is ONT-proprietary with no biocontainer; build containers/dorado_1.4.0.def -- see docs/containers.md."
                 }
             }
         },
