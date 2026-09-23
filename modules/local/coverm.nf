@@ -43,7 +43,7 @@ process COVERM_CLUSTER {
     # >= ${quality} in the selected CheckM report(s) (${hq_source}). Columns found by header name.
     : > hq_ids.txt
     pass_ids() {
-        [ -s "\$1" ] || return
+        [ -s "\$1" ] || return 0
         awk -F '\\t' -v q=${quality} -v k=${weight} '
             NR==1 { for(i=1;i<=NF;i++){ if(\$i=="Completeness")cc=i; if(\$i=="Contamination")ct=i;
                                         if(\$i=="Name"||\$i=="Bin Id"||\$i=="genome")id=i } next }
@@ -58,7 +58,7 @@ process COVERM_CLUSTER {
 
     mkdir -p high_quality_representatives
     sort -u hq_ids.txt | while read -r bin_id; do
-        [ -n "\$bin_id" ] && [ -f "representatives/\${bin_id}.fasta" ] && cp "representatives/\${bin_id}.fasta" high_quality_representatives/
+        if [ -n "\$bin_id" ] && [ -f "representatives/\${bin_id}.fasta" ]; then cp "representatives/\${bin_id}.fasta" high_quality_representatives/; fi
     done
     echo "HQ = completeness - ${weight}*contamination >= ${quality} (source: ${hq_source})" > high_quality_representatives/README.txt
 
@@ -106,7 +106,7 @@ process COVERM_CLUSTER_HQ {
     # selected CheckM report(s) (${hq_source}). Column indices found by header name.
     : > hq_ids.txt
     pass_ids() {
-        [ -s "\$1" ] || return
+        [ -s "\$1" ] || return 0
         awk -F '\\t' -v q=${quality} -v k=${weight} '
             NR==1 { for(i=1;i<=NF;i++){ if(\$i=="Completeness")cc=i; if(\$i=="Contamination")ct=i;
                                         if(\$i=="Name"||\$i=="Bin Id"||\$i=="genome")id=i } next }
@@ -122,7 +122,7 @@ process COVERM_CLUSTER_HQ {
     # Stage only the HQ bins for clustering.
     mkdir -p hq_bins
     sort -u hq_ids.txt | while read -r bin_id; do
-        [ -n "\$bin_id" ] && [ -f "bins/\${bin_id}.fasta" ] && cp "bins/\${bin_id}.fasta" hq_bins/
+        if [ -n "\$bin_id" ] && [ -f "bins/\${bin_id}.fasta" ]; then cp "bins/\${bin_id}.fasta" hq_bins/; fi
     done
     echo -e "representative\\tmember" > cluster_definition.tsv
 
@@ -193,7 +193,7 @@ process COVERM_CLUSTER_HQ_REF {
     # selected CheckM report(s) (${hq_source}). Column indices found by header name.
     : > hq_ids.txt
     pass_ids() {
-        [ -s "\$1" ] || return
+        [ -s "\$1" ] || return 0
         awk -F '\\t' -v q=${quality} -v k=${weight} '
             NR==1 { for(i=1;i<=NF;i++){ if(\$i=="Completeness")cc=i; if(\$i=="Contamination")ct=i;
                                         if(\$i=="Name"||\$i=="Bin Id"||\$i=="genome")id=i } next }
@@ -209,7 +209,7 @@ process COVERM_CLUSTER_HQ_REF {
     # Stage the HQ bins for clustering.
     mkdir -p hq_bins
     sort -u hq_ids.txt | while read -r bin_id; do
-        [ -n "\$bin_id" ] && [ -f "bins/\${bin_id}.fasta" ] && cp "bins/\${bin_id}.fasta" hq_bins/
+        if [ -n "\$bin_id" ] && [ -f "bins/\${bin_id}.fasta" ]; then cp "bins/\${bin_id}.fasta" hq_bins/; fi
     done
 
     # Add all reference genomes unconditionally. Fail loudly on a name clash with a bin
@@ -318,7 +318,7 @@ process COVERM_CLUSTER_WS {
     # >= ${quality} in the selected CheckM report(s) (${hq_source}). Columns found by header name.
     : > hq_ids.txt
     pass_ids() {
-        [ -s "\$1" ] || return
+        [ -s "\$1" ] || return 0
         awk -F '\\t' -v q=${quality} -v k=${weight} '
             NR==1 { for(i=1;i<=NF;i++){ if(\$i=="Completeness")cc=i; if(\$i=="Contamination")ct=i;
                                         if(\$i=="Name"||\$i=="Bin Id"||\$i=="genome")id=i } next }
@@ -333,7 +333,7 @@ process COVERM_CLUSTER_WS {
 
     mkdir -p high_quality_representatives
     sort -u hq_ids.txt | while read -r bin_id; do
-        [ -n "\$bin_id" ] && [ -f "representatives/\${bin_id}.fasta" ] && cp "representatives/\${bin_id}.fasta" high_quality_representatives/
+        if [ -n "\$bin_id" ] && [ -f "representatives/\${bin_id}.fasta" ]; then cp "representatives/\${bin_id}.fasta" high_quality_representatives/; fi
     done
     echo "HQ = completeness - ${weight}*contamination >= ${quality} (source: ${hq_source})" > high_quality_representatives/README.txt
 
@@ -381,7 +381,7 @@ process COVERM_CLUSTER_HQ_WS {
     # selected CheckM report(s) (${hq_source}). Column indices found by header name.
     : > hq_ids.txt
     pass_ids() {
-        [ -s "\$1" ] || return
+        [ -s "\$1" ] || return 0
         awk -F '\\t' -v q=${quality} -v k=${weight} '
             NR==1 { for(i=1;i<=NF;i++){ if(\$i=="Completeness")cc=i; if(\$i=="Contamination")ct=i;
                                         if(\$i=="Name"||\$i=="Bin Id"||\$i=="genome")id=i } next }
@@ -397,7 +397,7 @@ process COVERM_CLUSTER_HQ_WS {
     # Stage only the HQ bins for clustering.
     mkdir -p hq_bins
     sort -u hq_ids.txt | while read -r bin_id; do
-        [ -n "\$bin_id" ] && [ -f "bins/\${bin_id}.fasta" ] && cp "bins/\${bin_id}.fasta" hq_bins/
+        if [ -n "\$bin_id" ] && [ -f "bins/\${bin_id}.fasta" ]; then cp "bins/\${bin_id}.fasta" hq_bins/; fi
     done
     echo -e "representative\\tmember" > cluster_definition.tsv
 
