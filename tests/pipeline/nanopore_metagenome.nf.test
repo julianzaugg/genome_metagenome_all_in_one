@@ -27,6 +27,37 @@ nextflow_pipeline {
             assert workflow.trace.tasks().any { it.name.contains('COVERM_GENOME_ONT') }
             assert workflow.trace.tasks().any { it.name.contains('GENOME_TAXONOMY_QC') || it.name.contains('GTDBTK_CLASSIFYWF') }
             assert !workflow.trace.tasks().any { it.name.contains('DORADO_BASECALL') }
+            // no host removal, so no Cleanifier stage in the read-stat report
+            assert !path("$outputDir/00_read_stats/read_stat_report.tsv").readLines()[0].contains('Cleanifier')
+        }
+    }
+
+    test("nanopore_metagenome stub run reports host removal in the read-stat report") {
+
+        options "-stub"
+
+        when {
+            params {
+                mode   = "nanopore_metagenome"
+                input  = "${projectDir}/assets/samplesheets/nanopore_metagenome.csv"
+                outdir = "$outputDir"
+                skip_host_removal = false
+                cleanifier_db = "${projectDir}/tests/data/dbs/cleanifier/host.filter"
+                skip_assembly = true
+                skip_binning = true
+                skip_gene_catalogue = true
+                skip_mobile_elements = true
+                skip_rpkm = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert workflow.trace.tasks().any { it.name.contains('CLEANIFIER') }
+            assert path("$outputDir/00_read_stats/NANO_META_A.cleanifier.seqkit_stats.tsv").exists()
+            def header = path("$outputDir/00_read_stats/read_stat_report.tsv").readLines()[0].split('\t') as List
+            assert header.containsAll(['Cleanifier_count', 'Cleanifier_percent'])
+            assert header.indexOf('Cleanifier_count') > header.indexOf('Fastplong_percent')
         }
     }
 }

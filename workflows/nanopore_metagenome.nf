@@ -24,6 +24,7 @@ include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
 include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
 include { READ_STAT_REPORT }            from '../modules/local/read_stat_report'
+include { SEQKIT_STATS }                from '../modules/local/read_stats'
 include { CLEANIFIER_INDEX }            from '../modules/local/host_removal'
 include { DUMP_SOFTWARE_VERSIONS }      from '../modules/local/dump_software_versions'
 
@@ -124,8 +125,14 @@ workflow NANOPORE_METAGENOME {
         HOST_REMOVAL(ch_reads, ch_cleanifier_index)
         ch_clean = HOST_REMOVAL.out.reads
         ch_versions = ch_versions.mix(HOST_REMOVAL.out.versions)
+        // Host removal runs after LONG_READ_QC, so its read counts need their own SeqKit
+        // pass for the read-stat report (Cleanifier_count/percent), like the QC stages.
+        SEQKIT_STATS(HOST_REMOVAL.out.reads.map { meta, reads -> [ meta, 'cleanifier', reads ] })
+        ch_host_removal_stats = SEQKIT_STATS.out.stats
+        ch_versions = ch_versions.mix(SEQKIT_STATS.out.versions)
     } else {
         ch_clean = ch_reads
+        ch_host_removal_stats = Channel.empty()
     }
 
     // Raw per-sample read/base totals -- the denominator for MAPPING_ASSESS's
@@ -463,7 +470,7 @@ workflow NANOPORE_METAGENOME {
     // --- Read-stat report (per-sample read tracking across all steps) ---
     READ_STAT_REPORT(
         'metagenome',
-        LONG_READ_QC.out.stats.map { meta, stage, t -> t }.collect(),
+        LONG_READ_QC.out.stats.mix(ch_host_removal_stats).map { meta, stage, t -> t }.collect(),
         ch_scaffold_counts,
         [],
         ch_repmag_abund,

@@ -126,8 +126,14 @@ representatives, falling back to CheckM1 if CheckM2 is skipped.
 
 `00_read_stats/read_stat_report.tsv` tracks per-sample read counts through every
 step that ran. Counts are summed across mate files (paired reads = forward +
-reverse), and **every `*_percent` column is relative to the raw input**. Column
-shape depends on the mode:
+reverse), and **every `*_percent` column is relative to the raw input**.
+`Cleanifier_count`/`Cleanifier_percent` (when host removal runs) are the reads
+kept after host removal, which is the read set that assembly, binning and every
+CoverM mapping start from. CoverM's own relative abundances
+(`*_abundances.tsv`, including the `unmapped` row) are therefore relative to the
+host-removed reads, not the raw input, so they can be far higher than the
+matching `Reads_mapped_*_percent` when host removal discards most reads.
+Column shape depends on the mode:
 
 - **Metagenome**: `Sample_ID, GBbp, Raw_count`, then a `<Tool>_count`/`<Tool>_percent`
   pair per QC stage (Fastp / Porechop / Fastplong / Cleanifier — whichever ran),

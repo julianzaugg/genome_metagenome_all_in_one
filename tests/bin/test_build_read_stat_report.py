@@ -136,6 +136,56 @@ class MetagenomeReportTest(unittest.TestCase):
         self.assertEqual(row["Reads_mapped_Dereplicated_Bins_count"], "800")
 
 
+class HostRemovalStageTest(unittest.TestCase):
+    """Cleanifier (host removal) counts appear as their own QC stage after the others."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.seqkit = Path(self.tmp.name) / "seqkit"
+        self.seqkit.mkdir()
+
+    def stage(self, sample, stage, rows):
+        text = "file\tformat\ttype\tnum_seqs\tsum_len\n"
+        text += "".join(f"{sample}_{i}.fastq.gz\tFASTQ\tDNA\t{n}\t{n * 150}\n" for i, n in enumerate(rows, 1))
+        write(self.seqkit / f"{sample}.{stage}.seqkit_stats.tsv", text)
+
+    def run_report(self):
+        out = Path(self.tmp.name) / "report.tsv"
+        result = subprocess.run([sys.executable, str(SCRIPT), "--mode", "metagenome", "--out", str(out),
+                                 "--seqkit-dir", str(self.seqkit)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        header, rows = read_tsv(out)
+        return header, {row[0]: dict(zip(header, row)) for row in rows}
+
+    def test_paired_cleanifier_counts_are_summed_across_mates(self):
+        self.stage("JZ_01", "raw", [1000, 1000])
+        self.stage("JZ_01", "fastp", [900, 900])
+        self.stage("JZ_01", "cleanifier", [100, 100])
+        header, rows = self.run_report()
+        self.assertEqual(header, ["Sample_ID", "GBbp", "Raw_count", "Fastp_count", "Fastp_percent",
+                                  "Cleanifier_count", "Cleanifier_percent"])
+        self.assertEqual(rows["JZ_01"]["Cleanifier_count"], "200")
+        self.assertEqual(rows["JZ_01"]["Cleanifier_percent"], "10.00")
+
+    def test_long_read_cleanifier_follows_porechop_and_fastplong(self):
+        self.stage("barcode01", "raw_long", [3037244])
+        self.stage("barcode01", "porechop", [3027635])
+        self.stage("barcode01", "fastplong", [2573447])
+        self.stage("barcode01", "cleanifier", [26314])
+        header, rows = self.run_report()
+        self.assertEqual(header[3:], ["Porechop_count", "Porechop_percent", "Fastplong_count", "Fastplong_percent",
+                                      "Cleanifier_count", "Cleanifier_percent"])
+        self.assertEqual(rows["barcode01"]["Cleanifier_count"], "26314")
+        self.assertEqual(rows["barcode01"]["Cleanifier_percent"], "0.87")
+
+    def test_no_cleanifier_columns_without_host_removal(self):
+        self.stage("barcode01", "raw_long", [1000])
+        self.stage("barcode01", "fastplong", [800])
+        header, _ = self.run_report()
+        self.assertFalse(any(name.startswith("Cleanifier") for name in header))
+
+
 class IsolateReportTest(unittest.TestCase):
     def test_isolate_mode_adds_bases_mapped_next_to_read_count(self):
         with tempfile.TemporaryDirectory() as tmp:

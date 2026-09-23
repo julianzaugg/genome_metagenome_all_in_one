@@ -27,6 +27,7 @@ nextflow_pipeline {
             assert workflow.trace.tasks().any { it.name.contains('RPKM_CALCULATE') }
             // numbered output dirs exist
             assert path("$outputDir/00_read_stats").exists()
+            assert !path("$outputDir/00_read_stats/read_stat_report.tsv").readLines()[0].contains('Cleanifier')
             assert path("$outputDir/01_fastp").exists()
             assert path("$outputDir/10_coverm_scaffolds").exists()
             assert path("$outputDir/12_gene_catalogue").exists()
@@ -35,6 +36,35 @@ nextflow_pipeline {
             assert path("$outputDir/22_rpkm/singlem_rpkm_means.tsv").exists()
             assert path("$outputDir/22_rpkm/gene_catalogue_rpkm_per_gene_normalised.tsv").exists()
             assert path("$outputDir/22_rpkm/gene_catalogue_mapped_reads_per_gene.tsv").exists()
+        }
+    }
+
+    test("illumina_metagenome stub run reports host removal in the read-stat report") {
+
+        options "-stub"
+
+        when {
+            params {
+                mode   = "illumina_metagenome"
+                input  = "${projectDir}/assets/samplesheets/illumina_metagenome.csv"
+                outdir = "$outputDir"
+                skip_host_removal = false
+                cleanifier_db = "${projectDir}/tests/data/dbs/cleanifier/host.filter"
+                skip_assembly = true
+                skip_binning = true
+                skip_gene_catalogue = true
+                skip_mobile_elements = true
+                skip_rpkm = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert workflow.trace.tasks().any { it.name.contains('CLEANIFIER') }
+            assert path("$outputDir/00_read_stats/SAMPLE_A.cleanifier.seqkit_stats.tsv").exists()
+            def header = path("$outputDir/00_read_stats/read_stat_report.tsv").readLines()[0].split('\t') as List
+            assert header.containsAll(['Cleanifier_count', 'Cleanifier_percent'])
+            assert header.indexOf('Cleanifier_count') > header.indexOf('Fastp_percent')
         }
     }
 }
