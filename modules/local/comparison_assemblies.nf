@@ -3,13 +3,16 @@
  * rename it to the samplesheet's sample id (pyrodigal itself doesn't read
  * .gz directly; mirrors the decompression REFERENCE_PREP does for
  * --reference_genomes, modules/local/reference_genomes.nf).
+ *
+ * The input is staged under input/ so an assembly already named
+ * <sample>.fasta can't collide with the output of the same name.
  */
 process COMPARISON_ASSEMBLY_PREP {
     tag   { meta.id }
     label 'process_single'
 
     input:
-    tuple val(meta), path(assembly)
+    tuple val(meta), path(assembly, stageAs: 'input/*')
 
     output:
     tuple val(meta), path("${meta.id}.fasta"), emit: assembly
