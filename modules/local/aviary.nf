@@ -102,10 +102,9 @@ EOF
         fi
     fi
 
-    # DAS_Tool's DIAMOND can leave an unreadable diamond-tmp-* dir, which makes
-    # the publishDir copy of ${meta.id} fail with AccessDeniedException.
-    chmod -R u+rwX ${meta.id} 2>/dev/null || true
-    find ${meta.id} -type d -name 'diamond-tmp-*' -prune -exec rm -rf {} + 2>/dev/null || true
+    # DAS_Tool's DIAMOND can leave a stray diamond-tmp-* file (0600, bogus mtime)
+    # that makes the publishDir copy of ${meta.id} fail with AccessDeniedException.
+    find ${meta.id} -name 'diamond-tmp-*' -prune -exec rm -rf {} + 2>/dev/null || true
 
     mkdir -p ${meta.id}/renamed_bins
     shopt -s nullglob
