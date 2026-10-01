@@ -38,9 +38,11 @@ references are included.
 ### Hybrid (long + short) reads
 
 A Nanopore-mode sample may **also** provide `fastq_1`/`fastq_2`. Short-read-dependent
-steps (e.g. polypolish polishing) then run for that sample only; samples without
-short reads skip them. A mixed samplesheet works in a single run — gating is
-per-sample via `meta.has_short_reads`.
+steps then run for that sample only; samples without short reads skip them. A mixed
+samplesheet works in a single run; gating is per-sample via `meta.has_short_reads`.
+In `nanopore_isolate` the short reads polish the assembly (Polypolish) and are mapped
+back to it. In `nanopore_metagenome` they only polish the assembly before Aviary
+(`--skip_polypolish true` to turn that off).
 
 Dorado basecalling is optional and row-scoped. The workflow uses `long_reads`
 FASTQ when present. It schedules Dorado basecalling only for rows with `pod5_dir`
@@ -77,7 +79,7 @@ de-duplicated by `id`, then expanded into each requested group. chewBBACA input
 genome names longer than its practical limit are hashed, and the mapping is
 published with the chewBBACA outputs.
 
-### Comparison samplesheets (`illumina_metagenome` only)
+### Comparison samplesheets (metagenome modes)
 
 Two optional, independent samplesheets let you compare a second dataset against
 this run's own results without assembling or binning it — see
@@ -90,8 +92,13 @@ map:
 | Column     | Required | Notes |
 |------------|----------|-------|
 | `sample`   | yes      | unique id — must not collide with `--input` or `--comparison_assemblies` |
-| `fastq_1`  | yes      | gzipped FASTQ |
-| `fastq_2`  | yes      | gzipped FASTQ |
+| `fastq_1`  | illumina | gzipped FASTQ (`illumina_metagenome`) |
+| `fastq_2`  | illumina | gzipped FASTQ (`illumina_metagenome`) |
+| `long_reads` | nanopore | gzipped FASTQ (`nanopore_metagenome`; POD5 is not supported here) |
+
+In `nanopore_metagenome`, comparison reads get the main samples' long-read QC, host
+removal and profiling, and are mapped to the bin representatives with minimap2-ont.
+They are not mapped to the gene catalogue, because there is no long-read RPKM.
 
 `--comparison_assemblies assemblies.csv` — one row per external, pre-binned assembly
 to predict genes from:

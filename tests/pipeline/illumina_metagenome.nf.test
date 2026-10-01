@@ -31,11 +31,11 @@ nextflow_pipeline {
             assert path("$outputDir/01_fastp").exists()
             assert path("$outputDir/10_coverm_scaffolds").exists()
             assert path("$outputDir/12_gene_catalogue").exists()
-            assert path("$outputDir/22_rpkm").exists()
-            assert path("$outputDir/22_rpkm/singlem_sample_rpkm.tsv").exists()
-            assert path("$outputDir/22_rpkm/singlem_rpkm_means.tsv").exists()
-            assert path("$outputDir/22_rpkm/gene_catalogue_rpkm_per_gene_normalised.tsv").exists()
-            assert path("$outputDir/22_rpkm/gene_catalogue_mapped_reads_per_gene.tsv").exists()
+            assert path("$outputDir/23_rpkm").exists()
+            assert path("$outputDir/23_rpkm/singlem_sample_rpkm.tsv").exists()
+            assert path("$outputDir/23_rpkm/singlem_rpkm_means.tsv").exists()
+            assert path("$outputDir/23_rpkm/gene_catalogue_rpkm_per_gene_normalised.tsv").exists()
+            assert path("$outputDir/23_rpkm/gene_catalogue_mapped_reads_per_gene.tsv").exists()
         }
     }
 
@@ -65,6 +65,33 @@ nextflow_pipeline {
             def header = path("$outputDir/00_read_stats/read_stat_report.tsv").readLines()[0].split('\t') as List
             assert header.containsAll(['Cleanifier_count', 'Cleanifier_percent'])
             assert header.indexOf('Cleanifier_count') > header.indexOf('Fastp_percent')
+        }
+    }
+
+    test("illumina_metagenome stub passes host-removed singletons to metaSPAdes") {
+
+        options "-stub"
+
+        when {
+            params {
+                mode   = "illumina_metagenome"
+                input  = "${projectDir}/assets/samplesheets/illumina_metagenome.csv"
+                outdir = "$outputDir"
+                metaspades_singletons = true
+                cleanifier_db = "${projectDir}/tests/data/dbs/cleanifier/host.filter"
+                skip_binning = true
+                skip_gene_catalogue = true
+                skip_mobile_elements = true
+                skip_rpkm = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert workflow.trace.tasks().count { it.name.contains('COLLECT_SINGLETONS') } == 2
+            assert workflow.trace.tasks().count { it.name.contains('CLEANIFIER_SINGLETONS') } == 2
+            assert path("$outputDir/04_host_removed/singletons/SAMPLE_A.clean.fastq.gz").exists()
+            assert path("$outputDir/05_metaspades/SAMPLE_A.scaffolds.fasta").exists()
         }
     }
 }

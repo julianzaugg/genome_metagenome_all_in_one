@@ -1,17 +1,23 @@
 # Output
 
 Outputs are published under `--outdir` in numbered directories mirroring the
-bash-pipeline convention. **Numbers run gaplessly in execution order, per mode** —
-they are not kept consistent across modes (each `--mode` is a separate run with
-its own output tree, so there's no reason to). Illumina metagenome layout:
+bash-pipeline convention.
+Numbers follow execution order and are unique within a mode.
+Each metagenome mode has its own numbering.
+The two isolate modes share one scheme, so each has a few gaps (for example
+`illumina_isolate` has no `01`-`03`, which belong to nanopore read QC).
+`conf/modules.config` holds the same layout as a per-mode lookup on every
+`publishDir`; keep the two in sync.
+
+Illumina metagenome layout:
 
 ```
 00_read_stats/          # seqkit stats --tabular --all per stage + read_stat_report.tsv + mapping_assessment.tsv (long-format)
-01_fastp/               # QC'd reads + reports
-02_sylph/               # sylph combined profile
-03_singlem/             # multi-sample SingleM profile + OTU table
-04_host_removed/        # host-filtered reads
-05_metaspades/          # assemblies (scaffolds)
+01_fastp/               # QC'd reads + reports (+ *_R{1,2}.fail.fastq.gz unpaired reads and *.paired.fail.fastq.gz failed reads if --metaspades_singletons)
+02_sylph/               # sylph combined profile (raw reads)
+03_singlem/             # multi-sample SingleM profile + OTU table (raw reads)
+04_host_removed/        # host-filtered reads (+ singletons/ if --metaspades_singletons)
+05_metaspades/          # metaSPAdes output; <sample>.scaffolds.fasta is the >= 500 bp scaffold set every later step uses
 06_aviary/              # Aviary recovery; all_aviary_bins/ is the renamed canonical bin set
 07_checkm2/             # CheckM2 on all bins (drives dereplication + HQ selection)
 08_dereplicated_bins/   # CoverM cluster: representatives/ + high_quality_representatives/ + cluster_definition.tsv
@@ -26,21 +32,22 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 09_coverm_within_sample_derep_bins/ # each sample's reads + mapping_assessment.tsv[_per_genome] vs its own within-sample(or -group) dereplicated bins
 09_coverm_within_sample_hq_bins/     # each sample's reads + mapping_assessment.tsv[_per_genome] vs its own within-sample(or -group) HQ MAGs
 10_coverm_scaffolds/    # per-sample coverage/counts + bam + mapping_assessment.tsv[_per_genome] vs assembled scaffolds
-11_pyrodigal/           # predicted proteins/genes per assembly
+11_pyrodigal/           # predicted proteins/genes per sample assembly (feeds the gene catalogue)
+11_pyrodigal_bins/      # predicted proteins/genes per bin, all bins (if --run_genomespot or --run_dram_bins)
 12_gene_catalogue/      # cd-hit catalogue(s) + nucleotide CDS + membership (provenance)
 12_gene_catalogue_expanded/ # as 12_gene_catalogue but scaffold proteins + reference-genome and/or comparison-assembly proteins (if --reference_genomes and reference_genomes_in_catalogue, and/or --comparison_assemblies)
 13_dram/                # DRAM functional annotation of the catalogue (annotated in parallel chunks, merged)
 13_dram_expanded/       # DRAM functional annotation of the expanded catalogue (if the expanded catalogue is built)
-14_dram_bins/           # per-bin DRAM annotation + combined cross-MAG distillate in all_bins/ (if --run_dram_bins)
+14_dram_bins/           # per-bin DRAM annotation, all bins, + combined cross-MAG distillate in all_bins/ (if --run_dram_bins)
 15_gtdbtk/              # GTDB-Tk classification of all bins (+ references if --reference_genomes_taxonomy / --marker_tree_include_references)
-16_checkm1/             # CheckM1 on all bins (if --run_checkm1) — also feeds HQ selection
-17_nonpareil/           # coverage redundancy (if --run_nonpareil)
-18_genomespot/          # growth predictions (if --run_genomespot)
-19_barrnap/             # rRNA / 16S per representative (if --run_barrnap)
+16_checkm1/             # CheckM1 on all bins (if --run_checkm1); also feeds HQ selection
+17_nonpareil/           # coverage redundancy from clean R1 reads (if --run_nonpareil)
+18_genomespot/          # growth predictions, all bins (if --run_genomespot)
+19_barrnap/             # rRNA / 16S, all bins (if --run_barrnap)
 20_genomad/             # virus/plasmid prediction + pooled seqs/proteins/genes/summary
 21_checkv/              # CheckV quality of pooled viruses
 22_checkv_clustering/   # ANI clusters (virus + plasmid)
-23_rpkm/                # SingleM-normalized RPKM for the gene catalogue
+23_rpkm/                # SingleM-normalized RPKM for the gene catalogue (clean R1 reads)
 23_rpkm_expanded/       # RPKM for the expanded catalogue; reuses 23_rpkm's SingleM marker blast (if the expanded catalogue is built)
 24_marker_tree/         # MAG + GTDB-reference marker-gene tree (if --run_marker_tree)
 25_reference_genomes/   # normalised reference FASTAs, their CheckM2 report, predicted proteins, USERREF_-prefixed copies for GTDB-Tk (if --reference_genomes)
@@ -52,52 +59,67 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 pipeline_info/          # timeline / report / trace / dag
 ```
 
-Nanopore metagenome layout (`conf/modules.config`'s `mg()` helper): the QC
-front-end is 3 steps (dorado_basecall → porechop → fastplong) instead of
-Illumina's 1 (fastp), and assembly is 2 steps (myloasm → dorado_polish)
-instead of 1 (metaspades) — so every stage the two modes share is offset
-from the Illumina numbers above: **+2** up to and including host removal,
-**+3** from Aviary onward. RPKM (`23_rpkm`) and the comparison_reads /
-comparison_assemblies family (`29`/`30` above) aren't wired up for this mode
-yet, so those numbers don't appear here:
+GTDB-Tk, GenomeSPOT, Barrnap and DRAM-bins all run on **every bin** from
+`06_aviary/all_aviary_bins/`, before any dereplication, so each bin has its own
+taxonomy and traits whichever representative set you later analyse.
+
+For paired Illumina reads, RPKM (`23_rpkm/`, and comparison reads'
+`gene_catalogue_mapping/`) and Nonpareil (`17_nonpareil/`) use **R1 only**. Their
+read counts are therefore read counts, not pair counts, and about half the
+`Cleanifier_count` in the read-stat report (which sums both mates). Everything else
+(assembly, binning, every CoverM mapping) uses both mates.
+
+Nanopore metagenome layout. The QC front-end has three long-read steps plus
+fastp for the short reads of hybrid samples, and assembly has up to three steps
+(myloasm → Dorado polish → Polypolish), so the numbers differ from Illumina:
 
 ```
 00_read_stats/
 01_dorado_basecall/     # Dorado basecalling + demultiplexing (if --force_dorado_basecalling, or a POD5 sample has no long_reads)
 02_porechop/            # adapter-trimmed reads (unless --skip_porechop)
 03_fastplong/           # length/quality-filtered reads (unless --skip_qc)
-04_sylph/               # sylph combined profile
-05_singlem/             # multi-sample SingleM profile + OTU table
-06_host_removed/        # host-filtered reads
-07_myloasm/             # assemblies (scaffolds)
-08_dorado_polish/       # Dorado-polished assemblies (unless --skip_dorado_polish)
-09_aviary/              # Aviary recovery; all_aviary_bins/ is the renamed canonical bin set
-10_checkm2/             # CheckM2 on all bins (drives dereplication + HQ selection)
-11_dereplicated_bins/ / 11_dereplicated_hq_bins/ / 11_dereplicated_hq_ref_bins/ / 11_within_sample_dereplicated_[hq_]bins/<id>/
-12_coverm_bins/ / 12_coverm_hq_bins/ / 12_coverm_hq_derep_bins/ / 12_coverm_hq_ref_bins/ / 12_coverm_within_sample_[hq_]derep_bins/
-13_coverm_scaffolds_nanopore/ # per-sample coverage/counts + bam + mapping_assessment.tsv[_per_genome] vs assembled scaffolds
-14_pyrodigal/
-15_gene_catalogue/ / 15_gene_catalogue_expanded/
-16_dram/ / 16_dram_expanded/
-17_dram_bins/
-18_gtdbtk/
-19_checkm1/
-20_nonpareil/
-21_genomespot/
-22_barrnap/
-23_genomad/
-24_checkv/
-25_checkv_clustering/
-27_marker_tree/         # (if --run_marker_tree)
-28_reference_genomes/   # (if --reference_genomes)
-29_strain_reference/    # (if --run_tracs; --run_instrain errors out for this mode)
-30_instrain/            # never populated in this mode
-31_tracs/               # (if --run_tracs)
+04_fastp/               # QC'd short reads of hybrid samples, used only for Polypolish (unless --skip_polypolish)
+05_sylph/               # sylph combined profile (QC'd long reads)
+06_singlem/             # multi-sample SingleM profile + OTU table (QC'd long reads)
+07_host_removed/        # host-filtered reads
+08_myloasm/             # assemblies
+09_dorado_polish/       # Dorado-polished assemblies (unless --skip_dorado_polish)
+10_polypolish/          # short-read-polished assemblies, hybrid samples only (unless --skip_polypolish)
+11_aviary/              # Aviary recovery; all_aviary_bins/ is the renamed canonical bin set
+12_checkm2/             # CheckM2 on all bins
+13_dereplicated_bins/ / 13_dereplicated_hq_bins/ / 13_dereplicated_hq_ref_bins/ / 13_within_sample_dereplicated_[hq_]bins/<id>/
+14_coverm_bins/ / 14_coverm_hq_bins/ / 14_coverm_hq_derep_bins/ / 14_coverm_hq_ref_bins/ / 14_coverm_within_sample_{derep,hq}_bins/   # minimap2-ont, 90% identity, + bam
+15_coverm_scaffolds_nanopore/ # per-sample coverage/counts + bam + mapping_assessment.tsv[_per_genome] vs assembled scaffolds
+16_pyrodigal/ / 16_pyrodigal_bins/
+17_gene_catalogue/ / 17_gene_catalogue_expanded/
+18_dram/ / 18_dram_expanded/
+19_dram_bins/
+20_gtdbtk/
+21_checkm1/
+22_nonpareil/           # off by default for this mode (--run_nonpareil true to enable)
+23_genomespot/
+24_barrnap/
+25_genomad/
+26_checkv/
+27_checkv_clustering/
+28_marker_tree/         # (if --run_marker_tree)
+29_reference_genomes/   # (if --reference_genomes)
+30_strain_reference/    # (if --run_tracs; --run_instrain errors out for this mode)
+31_instrain/            # never populated in this mode
+32_tracs/               # (if --run_tracs)
+33_comparison_reads/    # external long reads (--comparison_reads): porechop/, fastplong/, host_removed/, sylph/, singlem/, bin_mapping/ (no gene-catalogue mapping)
+34_comparison_assemblies/ # (if --comparison_assemblies)
 pipeline_info/
 ```
 
-See the Illumina descriptions above for what each directory's contents mean —
-they're identical, only the numbering differs.
+RPKM is Illumina-only, so there is no RPKM directory in this mode.
+See the Illumina descriptions above for what each directory's contents mean;
+they are identical, only the numbering differs.
+
+Short reads on hybrid nanopore metagenome rows (`fastq_1`/`fastq_2` next to
+`long_reads`) are used for one thing only: Polypolish (`--careful`) of that
+sample's assembly before Aviary. Profiling, host removal, binning and every
+read mapping use the long reads.
 
 `24_marker_tree/` (opt-in via `--run_marker_tree`) holds, per domain
 (`bac120`/`ar53`): `<domain>.marker_msa.fasta` (placed genomes + selected
@@ -120,8 +142,11 @@ regardless of their CheckM2 quality; their leaf labels and the published GTDB-Tk
 summary show the original names. `--reference_genomes_taxonomy` classifies the
 references without placing them in a tree.
 
-`high_quality_representatives/` holds bins passing completeness − 3×contamination ≥ 50
-in **either** CheckM1 **or** CheckM2 (whichever ran). CoverM uses CheckM2 to pick
+`high_quality_representatives/` holds bins passing completeness − 3×contamination ≥ 50.
+With the default `--hq_quality_source either`, a bin passes if it meets that in CheckM1
+**or** CheckM2 (whichever ran). `both` requires a pass in CheckM1 **and** CheckM2 (both
+must run), and `checkm1` / `checkm2` use only that report. The same setting decides HQ
+for HQ-first dereplication and the strain-reference filter. CoverM uses CheckM2 to pick
 representatives, falling back to CheckM1 if CheckM2 is skipped.
 
 `00_read_stats/read_stat_report.tsv` tracks per-sample read counts through every
@@ -165,8 +190,8 @@ Column shape depends on the mode:
   HQ MAG. `08_dereplicated_hq_bins/` reverses the order — HQ MAGs are extracted
   from the FULL pre-dereplication bin set first, then those are dereplicated — so
   every HQ cluster is represented by an HQ genome. Which CheckM report(s) decide
-  "HQ" is controlled by `--hq_quality_source` (`both` (default) | `checkm1` |
-  `checkm2`; a bin is HQ if it passes in any selected report).
+  "HQ" is controlled by `--hq_quality_source` (`either` (default): pass in CheckM1 or
+  CheckM2; `both`: pass in CheckM1 and CheckM2; `checkm1` | `checkm2`: that report only).
 
   With `--within_sample_dereplication sample` (or `group`), two more pairs appear:
   `Reads_mapped_PerSample_Derep_MAGs` and `Reads_mapped_PerSample_HQ_MAGs`. These
@@ -230,36 +255,20 @@ CheckM, dereplication, read mapping, and GTDB-Tk. Filenames follow
 `<sample>.<binner>.<bin_number>.fasta`, with `bin_contig_list.tsv` mapping each
 renamed bin to its contigs.
 
-Nanopore metagenome reuses the metagenome output families, with Nanopore-specific
-read QC and assembly directories:
-
-```
-01_dorado_basecall/      # only when POD5 input is basecalled
-02_porechop/
-03_fastplong/
-07_myloasm/
-09_coverm_bins/         # minimap2-ont, 90% identity, + bam
-09_coverm_hq_bins/      # minimap2-ont, 90% identity, HQ representatives only, + bam
-09_coverm_hq_derep_bins/ # minimap2-ont, HQ-first-then-dereplicated set, + bam
-09_coverm_hq_ref_bins/  # minimap2-ont, HQ-MAGs+references set, + bam (if --reference_genomes)
-09_coverm_within_sample_derep_bins/ # minimap2-ont, within-sample(or -group) dereplicated set, + bam
-09_coverm_within_sample_hq_bins/     # minimap2-ont, within-sample(or -group) HQ MAGs, + bam
-10_coverm_scaffolds_nanopore/ # + bam
-```
-
 The `--reference_genomes` feature applies to both metagenome tracks: references are
 dereplicated with the HQ MAGs (`08_dereplicated_hq_ref_bins/`), reads are mapped to
 that set (`09_coverm_hq_ref_bins/`), and — if `--reference_genomes_in_catalogue` is
 true (the default) — reference proteins are added to an expanded gene catalogue
-(`12_gene_catalogue_expanded/` + `13_dram_expanded/`). RPKM for the expanded catalogue
+(`12_gene_catalogue_expanded/` + `13_dram_expanded/`; nanopore: `17_`/`18_`). RPKM for the expanded catalogue
 (`23_rpkm_expanded/`) is Illumina-only, and reuses the SingleM marker blast from
 `23_rpkm/` (only the gene-catalogue blast is recomputed). References are scored with
 CheckM2 (a report is generated, or supply one with `--reference_genomes_checkm2`, in
 which case every reference must appear in it).
 
-`--comparison_reads` and `--comparison_assemblies` (illumina_metagenome only) are a
+`--comparison_reads` and `--comparison_assemblies` (both metagenome modes) are a
 separate, independent way to expand the MAG/gene database for cross-cohort comparison
--- see `29_comparison_reads/` and `30_comparison_assemblies/` below. Unlike
+-- see `29_comparison_reads/` and `30_comparison_assemblies/` below (`33_`/`34_` in
+nanopore_metagenome). Unlike
 `--reference_genomes`, neither is dereplicated with the MAGs or classified with
 GTDB-Tk: comparison reads are only ever mapped as a query against this run's own bin
 representatives and gene catalogue, and comparison assemblies only ever contribute
@@ -268,31 +277,51 @@ exclude `--reference_genomes` from the expanded catalogue while still using it f
 dereplication/strain comparison -- e.g. when the references were themselves derived
 from the `--comparison_assemblies` data, to avoid counting the same genes twice.
 
-Isolate workflows publish assembly, QC, annotation, mobile-element, mapping, and
-comparative outputs under their tool names. Key directories:
+Isolate layout, shared by both isolate modes (each mode only produces its own
+steps, so each has gaps):
 
 ```
-05_autocycler/           # Nanopore isolate assembly
-06_dorado_polish/        # Nanopore isolate polishing, if enabled
-07_shovill/              # Illumina isolate assembly
-07_polypolish/           # hybrid Nanopore isolate polishing, if short reads exist
-08_dnaapler/             # Nanopore isolate chromosome orientation
-10_bakta/
-11_mlst/
-12_amrfinder/
-13_isescan/
-14_comparison_groups/    # materialized sample/reference groups
-15_panaroo/
-16_parsnp/
-17_gubbins/
-18_fastani/
-19_chewbacca/
-20_tree/
+00_read_stats/          # seqkit stats per stage + read_stat_report.tsv
+01_dorado_basecall/     # nanopore_isolate, only when POD5 input is basecalled
+02_porechop/            # nanopore_isolate
+03_fastplong/           # nanopore_isolate
+04_fastp/               # illumina_isolate reads; hybrid short reads in nanopore_isolate
+05_shovill/             # illumina_isolate assembly
+05_autocycler/          # nanopore_isolate assembly
+06_dorado_polish/       # nanopore_isolate (unless --skip_dorado_polish)
+07_polypolish/          # nanopore_isolate, hybrid samples only (unless --skip_polypolish)
+08_dnaapler/            # nanopore_isolate chromosome orientation
+09_checkm2/
+10_checkm1/             # (if --run_checkm1)
+11_gtdbtk/
+12_pyrodigal/           # per-genome proteins, pyrodigal single mode (if --run_genomespot or --run_dram_bins)
+13_genomespot/          # (if --run_genomespot)
+14_dram_bins/           # (if --run_dram_bins)
+15_barrnap/             # (if --run_barrnap)
+16_bakta/
+17_mlst/
+18_amrfinder/
+19_isescan/
+20_genomad/
+21_checkv/
+22_checkv_clustering/
+23_coverm_scaffolds/          # illumina_isolate reads vs own assembly
+23_coverm_scaffolds_nanopore/ # nanopore_isolate long reads vs own assembly
+23_coverm_scaffolds_illumina/ # nanopore_isolate hybrid short reads vs own assembly
+24_comparison_groups/   # materialized sample/reference groups
+25_fastani/
+26_parsnp/
+27_gubbins/
+28_panaroo/
+29_tree/
+30_chewbacca/
+pipeline_info/
 ```
 
-Nanopore isolate mapping emits separate CoverM outputs for long reads
-(`10_coverm_scaffolds_nanopore/`) and hybrid Illumina reads
-(`10_coverm_scaffolds_illumina/`) when both are present.
+For hybrid nanopore isolates, the read-stat report's `GBbp_SR`, `Raw_count_SR` and
+`*_SR_percent` columns divide by the raw short-read totals
+(`00_read_stats/<sample>.raw_short.seqkit_stats.tsv`); the long-read columns divide by
+the raw long-read totals.
 
 
 ## Strain comparison (`26_strain_reference/`, `27_instrain/`, `28_tracs/`)
@@ -433,8 +462,10 @@ use `--run_tracs`, which supports `map-ont` natively.
 
 ## Comparison reads and comparison assemblies (`29_comparison_reads/`, `30_comparison_assemblies/`)
 
-Opt-in via `--comparison_reads <samplesheet>` (sample, fastq_1, fastq_2) and/or
-`--comparison_assemblies <samplesheet>` (sample, assembly) — illumina_metagenome only.
+Opt-in via `--comparison_reads <samplesheet>` (sample, fastq_1, fastq_2 for
+illumina_metagenome; sample, long_reads for nanopore_metagenome) and/or
+`--comparison_assemblies <samplesheet>` (sample, assembly), in either metagenome mode
+(`29_`/`30_` for Illumina, `33_`/`34_` for nanopore).
 Both let you compare a second dataset (a different cohort, public data, an earlier
 study) against what this run recovered, without asking the pipeline to assemble or
 bin that dataset. The two are independent: samples need not correspond to each other,
@@ -452,7 +483,13 @@ samples to) plus the same bases-mapped assessment (unless `--skip_mapping_assess
 `23_rpkm/`, run separately against whichever gene catalogue tier is in play (the
 expanded one if `--reference_genomes`/`--comparison_assemblies` built one, otherwise
 the samples-only one) — its own SingleM marker blast is recomputed, since it's a
-different set of reads.
+different set of reads. Like `23_rpkm/`, it uses each sample's clean R1 reads only.
+
+In nanopore_metagenome, comparison reads go through the same long-read QC as the main
+samples (`porechop/`, `fastplong/`), host removal and profiling, and `bin_mapping/` uses
+minimap2-ont at 90% identity. There is no `gene_catalogue_mapping/`: the R1
+DIAMOND-blastx RPKM model has no long-read equivalent, which is also why RPKM is
+Illumina-only.
 
 `30_comparison_assemblies/` holds pyrodigal output (`.faa`/`.fna`/`.gff`) per external
 assembly — nothing else runs on these assemblies (no binning, no dereplication). Their
@@ -474,9 +511,9 @@ is set while `--reference_genomes` is unset, the expanded catalogue still gets b
   counts per catalogue gene and sample.
 - `23_rpkm/singlem_sample_rpkm.tsv` and `23_rpkm/singlem_rpkm_means.tsv` —
   marker-level and per-sample SingleM normalization values.
-- `14_comparison_groups/<group>/entries.tsv` — isolate comparison membership,
+- `24_comparison_groups/<group>/entries.tsv` — isolate comparison membership,
   including references and the chosen Parsnp reference.
-- `19_chewbacca/<group>_chewbbaca/genome_hash_map.tsv` — mapping from original
+- `30_chewbacca/<group>_chewbbaca/genome_hash_map.tsv` — mapping from original
   genome ids to chewBBACA-safe FASTA names.
 - `12_gene_catalogue_expanded/gene_catalogue_membership.tsv` — as above, but for the
   expanded catalogue; genes namespaced by their `--comparison_assemblies` sample id

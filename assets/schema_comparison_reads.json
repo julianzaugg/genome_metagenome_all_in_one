@@ -2,7 +2,7 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://raw.githubusercontent.com/ace/gmaio/main/assets/schema_comparison_reads.json",
     "title": "gmaio comparison-reads samplesheet",
-    "description": "One row per external comparison sample. These reads are QC'd/host-removed the same way as regular samples, then mapped against the final dereplicated bin representatives and the gene catalogue for comparison purposes -- they are never assembled or binned. Sample IDs must not collide with the main samplesheet's sample IDs.",
+    "description": "One row per external comparison sample. These reads are QC'd/host-removed the same way as regular samples, then mapped against the final dereplicated bin representatives (and, for illumina_metagenome, the gene catalogue) for comparison purposes -- they are never assembled or binned. illumina_metagenome reads fastq_1 + fastq_2; nanopore_metagenome reads long_reads. Sample IDs must not collide with the main samplesheet's sample IDs.",
     "type": "array",
     "items": {
         "type": "object",
@@ -11,7 +11,9 @@
                 "type": "string",
                 "pattern": "^\\S+$",
                 "errorMessage": "Sample name must be provided and contain no spaces",
-                "meta": ["id"]
+                "meta": [
+                    "id"
+                ]
             },
             "fastq_1": {
                 "type": "string",
@@ -26,8 +28,31 @@
                 "exists": true,
                 "pattern": "^\\S+\\.f(ast)?q\\.gz$",
                 "errorMessage": "fastq_2 must be a path to a gzipped FASTQ (.fastq.gz / .fq.gz)"
+            },
+            "long_reads": {
+                "type": "string",
+                "format": "file-path",
+                "exists": true,
+                "pattern": "^\\S+\\.f(ast)?q\\.gz$",
+                "errorMessage": "long_reads must be a path to a gzipped FASTQ (.fastq.gz / .fq.gz)"
             }
         },
-        "required": ["sample", "fastq_1", "fastq_2"]
+        "required": [
+            "sample"
+        ],
+        "anyOf": [
+            {
+                "required": [
+                    "fastq_1",
+                    "fastq_2"
+                ]
+            },
+            {
+                "required": [
+                    "long_reads"
+                ]
+            }
+        ],
+        "errorMessage": "Each comparison sample needs fastq_1 + fastq_2 (illumina_metagenome) or long_reads (nanopore_metagenome)"
     }
 }

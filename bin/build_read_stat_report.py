@@ -64,7 +64,9 @@ Two report shapes:
   isolate     Sample_ID, GBbp, Raw_count, <stage>_count/percent...,
               Covered_fraction, Mean_coverage, Read_count, Read_count_percent,
               Bases_mapped_A/B/C_count/percent
-              (+ _SR variants when a short-read mapping is present)
+              (+ GBbp_SR, Raw_count_SR and _SR mapping columns when a hybrid
+              nanopore isolate's short reads were mapped; the _SR percentages
+              divide by the raw short-read totals, SeqKit stage 'raw_short')
 """
 import argparse
 import glob
@@ -73,6 +75,8 @@ import sys
 
 # Raw baseline stage names (illumina vs nanopore); both map to "Raw".
 RAW_STAGES = ("raw", "raw_long")
+# Raw short reads of a hybrid nanopore isolate: the denominator for its _SR columns.
+RAW_SHORT_STAGE = "raw_short"
 # Non-raw QC stages in pipeline order, with their tool-name labels.
 STAGE_ORDER = ["fastp", "porechop", "fastplong", "cleanifier"]
 STAGE_LABEL = {
@@ -379,6 +383,7 @@ def build(mode, seqkit, scaffold, scaffold_sr, repmag, hq_names, has_hq,
             header += ["Covered_fraction", "Mean_coverage", "Read_count", "Read_count_percent"]
             header += bases_cols(None, "Scaffolds", None, metrics, True)
         if scaffold_sr:
+            header += ["GBbp_SR", "Raw_count_SR"]
             header += ["Covered_fraction_SR", "Mean_coverage_SR", "Read_count_SR", "Read_count_SR_percent"]
             header += bases_cols(None, "Scaffolds_SR", None, metrics, True)
 
@@ -449,9 +454,13 @@ def build(mode, seqkit, scaffold, scaffold_sr, repmag, hq_names, has_hq,
                 row += _isolate_cols(rec, raw_reads)
                 row += bases_cols(None, "Scaffolds", sample_assess.get("Scaffolds"), metrics, False, raw_bases)
             if scaffold_sr:
+                raw_sr = stages.get(RAW_SHORT_STAGE)
+                sr_reads = raw_sr["reads"] if raw_sr else 0
+                sr_bases = raw_sr["bases"] if raw_sr else 0
+                row += [f"{sr_bases / 1e9:.5f}" if raw_sr else "", str(sr_reads) if raw_sr else ""]
                 rec = scaffold_sr.get(sid, {})
-                row += _isolate_cols(rec, raw_reads)
-                row += bases_cols(None, "Scaffolds_SR", sample_assess.get("Scaffolds_SR"), metrics, False, raw_bases)
+                row += _isolate_cols(rec, sr_reads)
+                row += bases_cols(None, "Scaffolds_SR", sample_assess.get("Scaffolds_SR"), metrics, False, sr_bases)
 
         lines.append("\t".join(row))
     return "\n".join(lines) + "\n"

@@ -4,8 +4,8 @@ Concise guide for working in this repo. Keep this file minimal.
 
 ## What this is
 `gmaio` — one Nextflow DSL2 pipeline, four `--mode` tracks:
-`illumina_metagenome` (built), `nanopore_metagenome`, `illumina_isolate`,
-`nanopore_isolate` (scaffolds). nf-core-*style* but standalone. Containers only.
+`illumina_metagenome`, `nanopore_metagenome`, `illumina_isolate`,
+`nanopore_isolate`. nf-core-*style* but standalone. Containers only.
 
 ## Repo map
 - `main.nf` — entry; routes on `params.mode` to a `workflows/*.nf`.
@@ -39,14 +39,17 @@ nextflow run . -profile bunya --mode <mode> --input samplesheet.csv --outdir res
 ```
 
 ## Output directory numbering (`conf/modules.config`)
-All `publishDir` paths use a `NN_name` prefix. Numbers must be unique **within
-each mode** (metagenome and isolate run separately, so they can reuse numbers).
-After adding or renaming any `publishDir`, verify no prefix collision exists:
+All `publishDir` paths use an `NN_name` prefix in execution order. A process used by
+several modes looks its dir up per mode: `[illumina_metagenome: '01_fastp', ...][params.mode]`.
+Numbers must be unique **within each mode** (a family like `08_dereplicated_bins` /
+`08_dereplicated_hq_bins` shares one number). Each metagenome mode has its own numbering;
+the two isolate modes share one scheme. After adding or renaming any `publishDir`,
+stub-run each affected mode and check the published numbers:
 ```bash
-grep -oP '\d{2,3}_\w+' conf/modules.config | sort -V | uniq -c | sort -rn | awk '$1>1'
+ls results_test | grep -oE '^[0-9]+_[a-z]+' | sed 's/_.*//' | sort | uniq -c | awk '$1>1'
 ```
-A non-empty result means a collision — renumber to resolve before committing.
-Update `docs/output.md` to match whenever numbers change.
+Inspect any repeated number (it is fine only for one family). Update
+`docs/output.md` to match whenever numbers change.
 
 ## Conventions
 - Tool flags live in `conf/modules.config` as `ext.args`, never hard-coded in process bodies.

@@ -14,8 +14,8 @@ that would otherwise surprise you at runtime. For database setup see
 |-------|---------|---------------|
 | `--mode` | — (required) | Which track to run: `illumina_metagenome`, `nanopore_metagenome`, `illumina_isolate`, `nanopore_isolate`, or `download_dbs`. |
 | `--input` | — | Samplesheet CSV path. Not required for `--mode download_dbs`. |
-| `--comparison_reads` | — | Samplesheet CSV (`sample`, `fastq_1`, `fastq_2`) of external reads to QC/host-remove and map against this run's final dereplicated bin representatives and gene catalogue, for cross-cohort comparison — never assembled or binned. `illumina_metagenome` only. Requires `--skip_binning false --skip_dereplication false`. Sample IDs must not collide with `--input`'s or `--comparison_assemblies`'s. See `docs/output.md`. |
-| `--comparison_assemblies` | — | Samplesheet CSV (`sample`, `assembly`) of external, pre-binned assemblies whose predicted genes are folded into the expanded gene catalogue, for cross-cohort comparison — never binned. `illumina_metagenome` only. Requires `--skip_gene_catalogue false`. Sample IDs must not collide with `--input`'s or `--comparison_reads`'s. See `docs/output.md`. |
+| `--comparison_reads` | — | Samplesheet CSV of external reads to QC/host-remove and map against this run's final dereplicated bin representatives (and, for `illumina_metagenome`, the gene catalogue), for cross-cohort comparison; never assembled or binned. Columns: `sample`, `fastq_1`, `fastq_2` (`illumina_metagenome`) or `sample`, `long_reads` (`nanopore_metagenome`). Requires `--skip_binning false --skip_dereplication false`. Sample IDs must not collide with `--input`'s or `--comparison_assemblies`'s. See `docs/output.md`. |
+| `--comparison_assemblies` | — | Samplesheet CSV (`sample`, `assembly`) of external, pre-binned assemblies whose predicted genes are folded into the expanded gene catalogue, for cross-cohort comparison — never binned. Both metagenome modes. Requires `--skip_gene_catalogue false`. Sample IDs must not collide with `--input`'s or `--comparison_reads`'s. See `docs/output.md`. |
 | `--outdir` | `results` | Output directory. |
 | `--publish_dir_mode` | `copy` | Nextflow `publishDir` mode (`symlink`, `link`, `copy`, `move`, …). |
 | `--container_base` | — | Directory holding local `.sif` images for bespoke tools (Aviary, Dorado, GenomeSPOT). See [containers.md](containers.md). |
@@ -41,9 +41,9 @@ default.
 | `--skip_read_mapping` | `false` | CoverM contig-level read mapping to sample assemblies (all modes), and in metagenome modes, CoverM genome-level mapping to representative/HQ/dereplicated genome sets. |
 | `--skip_mapping_assessment` | `false` | The bases-mapped / percent-of-sequenced-bases metrics (`MAPPING_ASSESS`) computed alongside every CoverM read-mapping step above. Has no effect if `--skip_read_mapping` is set (there is nothing to assess). See `docs/output.md` for the metrics themselves. |
 | `--run_checkm1` | `true` | CheckM1 `lineage_wf`, run alongside CheckM2. Feeds `--hq_quality_source` HQ classification. Requires `--checkm1_db`. |
-| `--run_genomespot` | `true` | GenomeSPOT genome-trait prediction on representative genomes. |
-| `--run_barrnap` | `true` | Barrnap rRNA prediction on representative genomes. |
-| `--run_dram_bins` | `false` | Per-bin DRAM annotation + distillation, in addition to gene-catalogue DRAM annotation. |
+| `--run_genomespot` | `true` | GenomeSPOT genome-trait prediction on every genome: all bins (metagenome, before dereplication) or each assembly (isolate). |
+| `--run_barrnap` | `true` | Barrnap rRNA prediction on every genome: all bins (metagenome, before dereplication) or each assembly (isolate). |
+| `--run_dram_bins` | `false` | Per-genome DRAM annotation + distillation on every bin (metagenome) or assembly (isolate), in addition to gene-catalogue DRAM annotation. |
 
 ### Metagenome-only (`illumina_metagenome` + `nanopore_metagenome`)
 
@@ -55,9 +55,9 @@ default.
 | `--skip_binning` | `false` | The entire Aviary binning block — and, because they're nested inside it, everything downstream too: CheckM, dereplication, genome read-mapping, taxonomy/QC, and the marker-gene tree. |
 | `--skip_dereplication` | `false` | Cross-sample dereplication (`COVERM_CLUSTER`/`_HQ`/`_HQ_REF`); all bins are used as "representatives" instead. Must be `false` (with `--skip_binning false`) for `--reference_genomes`, `marker_tree_genome_source=hq_representatives`, and `--within_sample_dereplication` other than `none`. |
 | `--skip_gene_catalogue` | `false` | Gene prediction (Pyrodigal on scaffolds) and the whole gene-catalogue subworkflow (CD-HIT clustering, CDS extraction, membership tabulation, optional DRAM annotation, and the expanded catalogue when `--reference_genomes`/`--comparison_assemblies` contribute proteins). Must be `false` when `--comparison_assemblies` is set. |
-| `--skip_rpkm` | `false` | The RPKM subworkflow (SingleM-marker-normalized gene-catalogue abundance via DIAMOND blastx). Requires `--skip_qc false` and either `--skip_assembly false` or `--skip_gene_catalogue false` (hard error otherwise). |
+| `--skip_rpkm` | `false` | The RPKM subworkflow (SingleM-marker-normalized gene-catalogue abundance via DIAMOND blastx of each sample's clean **R1** reads only). `illumina_metagenome` only. Requires `--skip_qc false` and either `--skip_assembly false` or `--skip_gene_catalogue false` (hard error otherwise). |
 | `--within_sample_dereplication` | `none` | `sample`/`group` enables an independent within-sample or within-group dereplication path, reusing the pooled CheckM reports but clustering only that unit's own bins. Requires `--skip_binning false`. Independent of `--skip_dereplication` — see the schema description for the four across/within combinations. |
-| `--run_nonpareil` | `true` | Nonpareil sequencing-coverage/diversity estimation on host-removed clean reads. |
+| `--run_nonpareil` | `true` (illumina) / `false` (nanopore) | Nonpareil sequencing-coverage/diversity estimation on host-removed clean reads (R1 only for paired reads). Off by default for `nanopore_metagenome`, since Nonpareil's redundancy model assumes low-error short reads; pass `--run_nonpareil true` to run it anyway. |
 | `--run_marker_tree` | `false` | The marker-gene tree subworkflow (bac120/ar53 marker-protein alignment + closest/related GTDB reference selection + IQTree or VeryFastTree). Requires `--skip_taxonomy false`. See the `marker_tree_*` family below for tuning. |
 | `--run_instrain` | `false` | inStrain strain-level comparison of samples against the shared cross-sample dereplicated reference set (bowtie2 -> profile -> compare -> summary), answering whether two samples carry the same strain. Requires `--skip_binning false --skip_dereplication false`. `illumina_metagenome` only. See the `strain_*` family below. |
 | `--run_tracs` | `false` | TRACS strain/transmission comparison against the same shared reference set (build-db -> align -> combine -> distance -> cluster), giving pairwise SNP distances and transmission clusters. Builds its reference database from the pipeline's own MAGs, so no GTDB download is needed. Requires `--skip_binning false --skip_dereplication false`. Both metagenome modes; the only option for nanopore. |
@@ -83,18 +83,13 @@ default.
 | `--skip_porechop` | `false` | Porechop adapter trimming inside long-read QC. |
 | `--skip_dorado_polish` | `false` | Dorado long-read consensus polishing after assembly (Autocycler in isolate mode, myloasm in metagenome mode). |
 | `--force_dorado_basecalling` | `false` | Forces POD5 → Dorado basecalling even when direct long-read FASTQ is also supplied for a sample. |
-
-### `nanopore_isolate`-only
-
-| Param | Default | What it skips/enables |
-|-------|---------|------------------------|
-| `--skip_polypolish` | `false` | Polypolish short-read hybrid polishing of the long-read assembly. Only meaningful for samples that also carry short reads (`meta.has_short_reads`). |
+| `--skip_polypolish` | `false` | Polypolish short-read polishing of the long-read assembly, for samples that also carry `fastq_1`/`fastq_2` (others pass through). `nanopore_isolate`: after Dorado polish, before DNAapler. `nanopore_metagenome`: after Dorado polish, before Aviary, with `--careful`; short reads are used for nothing else in that mode. |
 
 ### HQ classification (shared, conditional on CheckM steps)
 
 | Param | Default | What it does |
 |-------|---------|---------------|
-| `--hq_quality_source` | `both` | Which CheckM report(s) classify a bin as HQ (`checkm1`, `checkm2`, or `both` — a bin is HQ if it passes in any selected report). Only meaningful when `--run_checkm1 true` and/or `--skip_checkm false`. |
+| `--hq_quality_source` | `either` | Which CheckM report(s) classify a bin as HQ (completeness − 3×contamination ≥ 50): `either` (passes in CheckM1 or CheckM2, whichever ran), `both` (passes in CheckM1 and CheckM2; needs `--run_checkm1 true --skip_checkm false`), `checkm1` or `checkm2`. Also used by the strain-reference filter. |
 
 ## Database / reference-path params
 
@@ -120,6 +115,7 @@ Params not in that table:
 | Param | Default | What it does |
 |-------|---------|---------------|
 | `--catalogue_identities` | `1.0,0.9` | Comma-separated CD-HIT identities for the gene catalogue; the first is the primary catalogue (used for CDS/membership/DRAM). |
+| `--metaspades_singletons` | `false` | Also give metaSPAdes fastp's unpaired reads (a read whose mate failed QC; R1 + R2 combined) as `-s`, after their own single-end host removal, as `run_metaspades.sh` did with trimmomatic singletons. `illumina_metagenome` only; needs `--skip_qc false`. Samples with no singletons assemble paired-only. |
 | `--rpkm_min_read_length` | `140` | Minimum selected R1 read length retained for RPKM DIAMOND blastx. |
 | `--sylph_profile_args` | — | Optional extra arguments for `sylph profile`. |
 | `--marker_tree_builder` | `veryfasttree` | Tree builder for the metagenome marker-gene tree (`veryfasttree` or `iqtree`). |

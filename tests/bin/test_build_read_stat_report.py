@@ -229,6 +229,50 @@ class IsolateReportTest(unittest.TestCase):
             self.assertEqual(row["Bases_mapped_A_Scaffolds_count"], "60000")
             self.assertEqual(row["Bases_mapped_A_Scaffolds_percent"], "80.00")
 
+    def test_hybrid_isolate_short_read_columns_use_raw_short_totals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for d in ("seqkit", "scaffolds", "scaffolds_sr", "assess"):
+                (root / d).mkdir()
+            header_line = "file\tformat\ttype\tnum_seqs\tsum_len\n"
+            write(root / "seqkit" / "ISO_2.raw_long.seqkit_stats.tsv",
+                  header_line + "ISO_2_long.fastq.gz\tFASTQ\tDNA\t100\t1000000\n")
+            write(root / "seqkit" / "ISO_2.raw_short.seqkit_stats.tsv",
+                  header_line + "ISO_2_R1.fastq.gz\tFASTQ\tDNA\t2000\t300000\n"
+                                "ISO_2_R2.fastq.gz\tFASTQ\tDNA\t2000\t300000\n")
+            write(root / "scaffolds" / "ISO_2_counts.tsv",
+                  "Genome\tISO_2 Covered Fraction\tISO_2 Mean\tISO_2 Count\nassembly\t0.99\t50.0\t90\n")
+            write(root / "scaffolds_sr" / "ISO_2_counts.tsv",
+                  "Genome\tISO_2 Covered Fraction\tISO_2 Mean\tISO_2 Count\nassembly\t0.98\t30.0\t3600\n")
+            write(root / "assess" / "ISO_2.Scaffolds_SR.mapping_assessment.tsv",
+                  "sample\tset\treads_mapped\treads_total\tpct_reads_mapped\treads_supplementary\t"
+                  "bases_mapped_readlen\tpct_bases_mapped_A\tbases_mapped_cigar\tpct_bases_mapped_B\t"
+                  "bases_mapped_cigar_all\tpct_bases_mapped_C\tbases_total\ttotal_source\tnote\n"
+                  "ISO_2\tScaffolds_SR\t3600\t4000\t90.00\t0\t540000\t90.00\t530000\t88.33\t"
+                  "530000\t88.33\t600000\tsupplied\t\n")
+
+            out = root / "report.tsv"
+            cmd = [sys.executable, str(SCRIPT), "--mode", "isolate", "--out", str(out),
+                   "--seqkit-dir", str(root / "seqkit"),
+                   "--scaffold-dir", str(root / "scaffolds"),
+                   "--scaffold-sr-dir", str(root / "scaffolds_sr"),
+                   "--assess-dir", str(root / "assess")]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            header, rows = read_tsv(out)
+            row = dict(zip(header, rows[0]))
+            # long-read columns keep the long-read denominator
+            self.assertEqual(row["Raw_count"], "100")
+            self.assertEqual(row["Read_count_percent"], "90.00")
+            # short-read columns divide by the raw SHORT-read totals, not the long-read ones
+            self.assertEqual(row["Raw_count_SR"], "4000")
+            self.assertEqual(row["GBbp_SR"], "0.00060")
+            self.assertEqual(row["Read_count_SR_percent"], "90.00")
+            self.assertEqual(row["Bases_mapped_A_Scaffolds_SR_percent"], "90.00")
+            # raw_short is a denominator, not a QC stage column
+            self.assertNotIn("Raw_short_count", header)
+
 
 if __name__ == "__main__":
     unittest.main()

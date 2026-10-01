@@ -21,7 +21,7 @@ process COVERM_CLUSTER {
     def args      = task.ext.args ?: '--precluster-method finch --ani 0.95'
     def quality   = task.ext.quality ?: 50   // completeness - weight*contamination >= quality
     def weight    = task.ext.weight  ?: 3
-    def hq_source = task.ext.hq_source ?: 'both'   // classify HQ by checkm1, checkm2, or both
+    def hq_source = task.ext.hq_source ?: 'either' // checkm1 | checkm2 | either (pass in one) | both (pass in both)
     """
     # CoverM picks representatives by quality: prefer CheckM2, else CheckM1 tab-table.
     qcflag=""
@@ -40,26 +40,13 @@ process COVERM_CLUSTER {
         \$qcflag
 
     # High-quality subset: a representative is HQ if completeness - ${weight}*contamination
-    # >= ${quality} in the selected CheckM report(s) (${hq_source}). Columns found by header name.
-    : > hq_ids.txt
-    pass_ids() {
-        [ -s "\$1" ] || return 0
-        awk -F '\\t' -v q=${quality} -v k=${weight} '
-            NR==1 { for(i=1;i<=NF;i++){ if(\$i=="Completeness")cc=i; if(\$i=="Contamination")ct=i;
-                                        if(\$i=="Name"||\$i=="Bin Id"||\$i=="genome")id=i } next }
-            (cc && ct && id && (\$cc - k*\$ct) >= q) { print \$id }
-        ' "\$1" >> hq_ids.txt
-    }
-    case "${hq_source}" in
-        both)    pass_ids "${checkm2_report}"; pass_ids "${checkm1_report}" ;;
-        checkm2) pass_ids "${checkm2_report}" ;;
-        checkm1) pass_ids "${checkm1_report}" ;;
-    esac
+    # >= ${quality} in the selected CheckM report(s) (${hq_source}).
+    select_hq_ids.sh ${hq_source} ${quality} ${weight} "${checkm2_report}" "${checkm1_report}" > hq_ids.txt
 
     mkdir -p high_quality_representatives
-    sort -u hq_ids.txt | while read -r bin_id; do
+    while read -r bin_id; do
         if [ -n "\$bin_id" ] && [ -f "representatives/\${bin_id}.fasta" ]; then cp "representatives/\${bin_id}.fasta" high_quality_representatives/; fi
-    done
+    done < hq_ids.txt
     echo "HQ = completeness - ${weight}*contamination >= ${quality} (source: ${hq_source})" > high_quality_representatives/README.txt
 
     cat <<-END_VERSIONS > versions.yml
@@ -100,30 +87,17 @@ process COVERM_CLUSTER_HQ {
     def args      = task.ext.args ?: '--precluster-method finch --ani 0.95'
     def quality   = task.ext.quality ?: 50   // completeness - weight*contamination >= quality
     def weight    = task.ext.weight  ?: 3
-    def hq_source = task.ext.hq_source ?: 'both'   // classify HQ by checkm1, checkm2, or both
+    def hq_source = task.ext.hq_source ?: 'either' // checkm1 | checkm2 | either (pass in one) | both (pass in both)
     """
     # Identify HQ bins first: completeness - ${weight}*contamination >= ${quality} in the
-    # selected CheckM report(s) (${hq_source}). Column indices found by header name.
-    : > hq_ids.txt
-    pass_ids() {
-        [ -s "\$1" ] || return 0
-        awk -F '\\t' -v q=${quality} -v k=${weight} '
-            NR==1 { for(i=1;i<=NF;i++){ if(\$i=="Completeness")cc=i; if(\$i=="Contamination")ct=i;
-                                        if(\$i=="Name"||\$i=="Bin Id"||\$i=="genome")id=i } next }
-            (cc && ct && id && (\$cc - k*\$ct) >= q) { print \$id }
-        ' "\$1" >> hq_ids.txt
-    }
-    case "${hq_source}" in
-        both)    pass_ids "${checkm2_report}"; pass_ids "${checkm1_report}" ;;
-        checkm2) pass_ids "${checkm2_report}" ;;
-        checkm1) pass_ids "${checkm1_report}" ;;
-    esac
+    # selected CheckM report(s) (${hq_source}).
+    select_hq_ids.sh ${hq_source} ${quality} ${weight} "${checkm2_report}" "${checkm1_report}" > hq_ids.txt
 
     # Stage only the HQ bins for clustering.
     mkdir -p hq_bins
-    sort -u hq_ids.txt | while read -r bin_id; do
+    while read -r bin_id; do
         if [ -n "\$bin_id" ] && [ -f "bins/\${bin_id}.fasta" ]; then cp "bins/\${bin_id}.fasta" hq_bins/; fi
-    done
+    done < hq_ids.txt
     echo -e "representative\\tmember" > cluster_definition.tsv
 
     # CoverM picks representatives by quality: prefer CheckM2, else CheckM1 tab-table.
@@ -187,30 +161,17 @@ process COVERM_CLUSTER_HQ_REF {
     def args      = task.ext.args ?: '--precluster-method finch --ani 0.95'
     def quality   = task.ext.quality ?: 50   // completeness - weight*contamination >= quality
     def weight    = task.ext.weight  ?: 3
-    def hq_source = task.ext.hq_source ?: 'both'   // classify HQ by checkm1, checkm2, or both
+    def hq_source = task.ext.hq_source ?: 'either' // checkm1 | checkm2 | either (pass in one) | both (pass in both)
     """
     # Identify HQ bins first: completeness - ${weight}*contamination >= ${quality} in the
-    # selected CheckM report(s) (${hq_source}). Column indices found by header name.
-    : > hq_ids.txt
-    pass_ids() {
-        [ -s "\$1" ] || return 0
-        awk -F '\\t' -v q=${quality} -v k=${weight} '
-            NR==1 { for(i=1;i<=NF;i++){ if(\$i=="Completeness")cc=i; if(\$i=="Contamination")ct=i;
-                                        if(\$i=="Name"||\$i=="Bin Id"||\$i=="genome")id=i } next }
-            (cc && ct && id && (\$cc - k*\$ct) >= q) { print \$id }
-        ' "\$1" >> hq_ids.txt
-    }
-    case "${hq_source}" in
-        both)    pass_ids "${checkm2_report}"; pass_ids "${checkm1_report}" ;;
-        checkm2) pass_ids "${checkm2_report}" ;;
-        checkm1) pass_ids "${checkm1_report}" ;;
-    esac
+    # selected CheckM report(s) (${hq_source}).
+    select_hq_ids.sh ${hq_source} ${quality} ${weight} "${checkm2_report}" "${checkm1_report}" > hq_ids.txt
 
     # Stage the HQ bins for clustering.
     mkdir -p hq_bins
-    sort -u hq_ids.txt | while read -r bin_id; do
+    while read -r bin_id; do
         if [ -n "\$bin_id" ] && [ -f "bins/\${bin_id}.fasta" ]; then cp "bins/\${bin_id}.fasta" hq_bins/; fi
-    done
+    done < hq_ids.txt
 
     # Add all reference genomes unconditionally. Fail loudly on a name clash with a bin
     # (would make both the staged FASTA and the combined CheckM2 report ambiguous).
@@ -296,7 +257,7 @@ process COVERM_CLUSTER_WS {
     def args      = task.ext.args ?: '--precluster-method finch --ani 0.95'
     def quality   = task.ext.quality ?: 50   // completeness - weight*contamination >= quality
     def weight    = task.ext.weight  ?: 3
-    def hq_source = task.ext.hq_source ?: 'both'   // classify HQ by checkm1, checkm2, or both
+    def hq_source = task.ext.hq_source ?: 'either' // checkm1 | checkm2 | either (pass in one) | both (pass in both)
     """
     # CoverM picks representatives by quality: prefer CheckM2, else CheckM1 tab-table.
     qcflag=""
@@ -315,26 +276,13 @@ process COVERM_CLUSTER_WS {
         \$qcflag
 
     # High-quality subset: a representative is HQ if completeness - ${weight}*contamination
-    # >= ${quality} in the selected CheckM report(s) (${hq_source}). Columns found by header name.
-    : > hq_ids.txt
-    pass_ids() {
-        [ -s "\$1" ] || return 0
-        awk -F '\\t' -v q=${quality} -v k=${weight} '
-            NR==1 { for(i=1;i<=NF;i++){ if(\$i=="Completeness")cc=i; if(\$i=="Contamination")ct=i;
-                                        if(\$i=="Name"||\$i=="Bin Id"||\$i=="genome")id=i } next }
-            (cc && ct && id && (\$cc - k*\$ct) >= q) { print \$id }
-        ' "\$1" >> hq_ids.txt
-    }
-    case "${hq_source}" in
-        both)    pass_ids "${checkm2_report}"; pass_ids "${checkm1_report}" ;;
-        checkm2) pass_ids "${checkm2_report}" ;;
-        checkm1) pass_ids "${checkm1_report}" ;;
-    esac
+    # >= ${quality} in the selected CheckM report(s) (${hq_source}).
+    select_hq_ids.sh ${hq_source} ${quality} ${weight} "${checkm2_report}" "${checkm1_report}" > hq_ids.txt
 
     mkdir -p high_quality_representatives
-    sort -u hq_ids.txt | while read -r bin_id; do
+    while read -r bin_id; do
         if [ -n "\$bin_id" ] && [ -f "representatives/\${bin_id}.fasta" ]; then cp "representatives/\${bin_id}.fasta" high_quality_representatives/; fi
-    done
+    done < hq_ids.txt
     echo "HQ = completeness - ${weight}*contamination >= ${quality} (source: ${hq_source})" > high_quality_representatives/README.txt
 
     cat <<-END_VERSIONS > versions.yml
@@ -375,30 +323,17 @@ process COVERM_CLUSTER_HQ_WS {
     def args      = task.ext.args ?: '--precluster-method finch --ani 0.95'
     def quality   = task.ext.quality ?: 50   // completeness - weight*contamination >= quality
     def weight    = task.ext.weight  ?: 3
-    def hq_source = task.ext.hq_source ?: 'both'   // classify HQ by checkm1, checkm2, or both
+    def hq_source = task.ext.hq_source ?: 'either' // checkm1 | checkm2 | either (pass in one) | both (pass in both)
     """
     # Identify HQ bins first: completeness - ${weight}*contamination >= ${quality} in the
-    # selected CheckM report(s) (${hq_source}). Column indices found by header name.
-    : > hq_ids.txt
-    pass_ids() {
-        [ -s "\$1" ] || return 0
-        awk -F '\\t' -v q=${quality} -v k=${weight} '
-            NR==1 { for(i=1;i<=NF;i++){ if(\$i=="Completeness")cc=i; if(\$i=="Contamination")ct=i;
-                                        if(\$i=="Name"||\$i=="Bin Id"||\$i=="genome")id=i } next }
-            (cc && ct && id && (\$cc - k*\$ct) >= q) { print \$id }
-        ' "\$1" >> hq_ids.txt
-    }
-    case "${hq_source}" in
-        both)    pass_ids "${checkm2_report}"; pass_ids "${checkm1_report}" ;;
-        checkm2) pass_ids "${checkm2_report}" ;;
-        checkm1) pass_ids "${checkm1_report}" ;;
-    esac
+    # selected CheckM report(s) (${hq_source}).
+    select_hq_ids.sh ${hq_source} ${quality} ${weight} "${checkm2_report}" "${checkm1_report}" > hq_ids.txt
 
     # Stage only the HQ bins for clustering.
     mkdir -p hq_bins
-    sort -u hq_ids.txt | while read -r bin_id; do
+    while read -r bin_id; do
         if [ -n "\$bin_id" ] && [ -f "bins/\${bin_id}.fasta" ]; then cp "bins/\${bin_id}.fasta" hq_bins/; fi
-    done
+    done < hq_ids.txt
     echo -e "representative\\tmember" > cluster_definition.tsv
 
     # CoverM picks representatives by quality: prefer CheckM2, else CheckM1 tab-table.

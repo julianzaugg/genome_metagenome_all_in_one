@@ -28,8 +28,8 @@ nextflow_pipeline {
             assert workflow.trace.tasks().any { it.name.contains('FASTANI') }
             assert workflow.trace.tasks().any { it.name.contains('PANAROO_RUN') }
             assert workflow.trace.tasks().any { it.name.contains('CHEWBACCA_RUN') }
-            assert path("$outputDir/14_comparison_groups/speciesA").exists()
-            assert path("$outputDir/14_comparison_groups/mixed_overlap").exists()
+            assert path("$outputDir/24_comparison_groups/speciesA").exists()
+            assert path("$outputDir/24_comparison_groups/mixed_overlap").exists()
         }
     }
 }

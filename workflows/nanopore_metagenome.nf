@@ -1,8 +1,15 @@
 /*
  * NANOPORE_METAGENOME — long-read metagenome workflow.
+ *
+ * Short reads on hybrid rows (fastq_1/fastq_2) are used for one thing only:
+ * Polypolish of that sample's long-read assembly before Aviary. Everything
+ * else (profiling, host removal, binning, mapping) uses the long reads.
  */
 
 include { INPUT_CHECK }        from '../subworkflows/local/input_check'
+include { INPUT_CHECK as COMPARISON_INPUT_CHECK } from '../subworkflows/local/input_check'
+include { COMPARISON_ASSEMBLIES } from '../subworkflows/local/comparison_assemblies'
+include { COMPARISON_READS }      from '../subworkflows/local/comparison_reads'
 include { LONG_READ_QC }       from '../subworkflows/local/long_read_qc'
 include { READ_PROFILING }     from '../subworkflows/local/read_profiling'
 include { HOST_REMOVAL }       from '../subworkflows/local/host_removal'
@@ -13,7 +20,9 @@ include { MARKER_GENE_TREE }   from '../subworkflows/local/marker_gene_tree'
 include { STRAIN_COMPARISON }  from '../subworkflows/local/strain_comparison'
 include { MOBILE_ELEMENTS }    from '../subworkflows/local/mobile_elements'
 
-include { MYLOASM }                     from '../modules/local/assembly_isolate'
+include { FASTP }                       from '../modules/nf-core/fastp/main'
+include { FASTQ_GZIP_TEST }             from '../modules/local/validate'
+include { MYLOASM; POLYPOLISH }         from '../modules/local/assembly_isolate'
 include { DORADO_POLISH }               from '../modules/local/long_reads'
 include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict/main'
 include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
@@ -73,6 +82,21 @@ workflow NANOPORE_METAGENOME {
         }
     }
 
+    if (params.comparison_assemblies && params.skip_gene_catalogue) {
+        error "--comparison_assemblies feeds the expanded gene catalogue, which needs the gene catalogue enabled. Rerun with --skip_gene_catalogue false, or unset --comparison_assemblies."
+    }
+    if (params.comparison_reads) {
+        if (params.skip_binning || params.skip_dereplication) {
+            error "--comparison_reads maps external reads to the final dereplicated bin representatives, which needs binning + dereplication. Rerun with --skip_binning false --skip_dereplication false, or unset --comparison_reads."
+        }
+        def no_long = file(params.comparison_reads, checkIfExists: true).splitCsv(header: true, strip: true)
+            .findAll { row -> !row.long_reads?.trim() }
+            .collect { row -> row.sample }
+        if (no_long) {
+            error "--comparison_reads in nanopore_metagenome needs a long_reads FASTQ on every row (POD5 and short-read-only comparison samples are not supported). Missing for: ${no_long.join(', ')}"
+        }
+    }
+
     INPUT_CHECK(params.input, params.mode)
 
     ch_direct_long = INPUT_CHECK.out.reads_long
@@ -94,6 +118,20 @@ workflow NANOPORE_METAGENOME {
     ch_versions = Channel.empty()
         .mix(INPUT_CHECK.out.versions)
         .mix(LONG_READ_QC.out.versions)
+
+    // Short reads of hybrid rows: QC'd only to polish that sample's assembly.
+    ch_short = Channel.empty()
+    if (!params.skip_assembly && !params.skip_polypolish) {
+        if (!params.skip_qc) {
+            FASTP(INPUT_CHECK.out.reads_short.map { meta, reads -> [ meta, reads, [] ] }, false, false, false)
+            ch_short = FASTP.out.reads
+            // FASTP emits versions via topic: versions (collected globally below)
+        } else {
+            FASTQ_GZIP_TEST(INPUT_CHECK.out.reads_short)
+            ch_short = FASTQ_GZIP_TEST.out.reads
+            ch_versions = ch_versions.mix(FASTQ_GZIP_TEST.out.versions)
+        }
+    }
 
     ch_sylph_tax_meta = params.sylph_tax_metadata
         ? Channel.fromPath(params.sylph_tax_metadata, checkIfExists: true).collect()
@@ -181,6 +219,19 @@ workflow NANOPORE_METAGENOME {
             )
             ch_assembly = DORADO_POLISH.out.assembly
             ch_versions = ch_versions.mix(DORADO_POLISH.out.versions)
+        }
+
+        // Short-read polish for hybrid samples; long-read-only samples pass through.
+        // INPUT_CHECK's reads_short meta lacks single_end:true, so join on id.
+        if (!params.skip_polypolish) {
+            ch_polypolish_in = ch_assembly
+                .map { meta, assembly -> [ meta.id, meta, assembly ] }
+                .join(ch_short.map { meta, reads -> [ meta.id, reads ] })
+                .map { id, meta, assembly, reads -> [ meta, assembly, reads ] }
+            POLYPOLISH(ch_polypolish_in)
+            ch_assembly = ch_assembly.filter { meta, assembly -> !meta.has_short_reads }
+                .mix(POLYPOLISH.out.assembly)
+            ch_versions = ch_versions.mix(POLYPOLISH.out.versions)
         }
     }
 
@@ -436,21 +487,70 @@ workflow NANOPORE_METAGENOME {
         }
     }
 
+    // --- Gene catalogue (scaffold proteins, + optional external gene sources; see
+    // illumina_metagenome.nf for why each extra source is toggled independently) ---
+    def build_expanded_catalogue = (params.reference_genomes && params.reference_genomes_in_catalogue) ||
+                                    (params.comparison_assemblies as boolean)
     if (!params.skip_gene_catalogue) {
         PYRODIGAL_SCAFFOLDS(ch_assembly)
+
+        ch_catalogue_extra_faa = Channel.empty()
+        ch_catalogue_extra_fna = Channel.empty()
+        if (params.reference_genomes && params.reference_genomes_in_catalogue) {
+            ch_catalogue_extra_faa = ch_catalogue_extra_faa.mix(REFERENCE_GENOMES.out.faa)
+            ch_catalogue_extra_fna = ch_catalogue_extra_fna.mix(REFERENCE_GENOMES.out.fna)
+        }
+        if (params.comparison_assemblies) {
+            COMPARISON_ASSEMBLIES(params.comparison_assemblies)
+            ch_catalogue_extra_faa = ch_catalogue_extra_faa.mix(COMPARISON_ASSEMBLIES.out.faa)
+            ch_catalogue_extra_fna = ch_catalogue_extra_fna.mix(COMPARISON_ASSEMBLIES.out.fna)
+            ch_versions = ch_versions.mix(COMPARISON_ASSEMBLIES.out.versions)
+        }
+
         GENE_CATALOGUE(
             PYRODIGAL_SCAFFOLDS.out.faa,
             PYRODIGAL_SCAFFOLDS.out.fna,
             params.catalogue_identities,
             optpath(params.dram_db),
             !params.skip_annotation,
-            params.reference_genomes ? REFERENCE_GENOMES.out.faa : Channel.empty(),
-            params.reference_genomes ? REFERENCE_GENOMES.out.fna : Channel.empty(),
-            params.reference_genomes as boolean
+            ch_catalogue_extra_faa,
+            ch_catalogue_extra_fna,
+            build_expanded_catalogue
         )
         ch_versions = ch_versions
             .mix(PYRODIGAL_SCAFFOLDS.out.versions)
             .mix(GENE_CATALOGUE.out.versions)
+    }
+
+    // --- Comparison reads (external long reads mapped against this run's bins; never
+    // assembled/binned, and not mapped to the gene catalogue -- no long-read RPKM) ---
+    if (params.comparison_reads) {
+        COMPARISON_INPUT_CHECK(params.comparison_reads, params.mode)
+        COMPARISON_READS(
+            COMPARISON_INPUT_CHECK.out.reads_long,
+            true,
+            !params.skip_qc,
+            !params.skip_porechop,
+            !params.skip_host_removal,
+            params.skip_host_removal ? Channel.value([]) : ch_cleanifier_index,
+            !params.skip_sylph,
+            !params.skip_sylph && params.sylph_tax_metadata != null,
+            Channel.fromPath(params.sylph_db, checkIfExists: true).collect(),
+            ch_sylph_tax_meta,
+            !params.skip_singlem,
+            file(params.singlem_metapackage, checkIfExists: true),
+            !params.skip_read_mapping,
+            ch_reps,
+            !params.skip_mapping_assessment,
+            false,
+            [],
+            [],
+            [],
+            params.rpkm_min_read_length
+        )
+        ch_versions = ch_versions
+            .mix(COMPARISON_INPUT_CHECK.out.versions)
+            .mix(COMPARISON_READS.out.versions)
     }
 
     if (!params.skip_mobile_elements) {

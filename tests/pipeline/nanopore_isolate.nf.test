@@ -24,7 +24,10 @@ nextflow_pipeline {
             assert workflow.trace.tasks().any { it.name.contains('AUTOCYCLER_ASSEMBLE') }
             assert workflow.trace.tasks().any { it.name.contains('DORADO_POLISH') }
             assert workflow.trace.tasks().any { it.name.contains('POLYPOLISH') }
-            assert workflow.trace.tasks().any { it.name.contains('DNAAPLER') }
+            // the hybrid sample (ISO_2) must survive polishing, not just ISO_1
+            assert workflow.trace.tasks().count { it.name.contains('DNAAPLER') } == 2
+            assert path("$outputDir/00_read_stats/ISO_2.raw_short.seqkit_stats.tsv").exists()
+            assert path("$outputDir/00_read_stats/read_stat_report.tsv").readLines()[0].contains('Raw_count_SR')
             assert workflow.trace.tasks().any { it.name.contains('COVERM_CONTIG_ONT') }
             assert workflow.trace.tasks().any { it.name.contains('COVERM_CONTIG_SR') }
             assert !workflow.trace.tasks().any { it.name.contains('DORADO_BASECALL') }

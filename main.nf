@@ -45,6 +45,9 @@ workflow {
     if (params.hq_quality_source == 'checkm2' && params.skip_checkm) {
         error "hq_quality_source='checkm2' requires skip_checkm=false (CheckM2 is not being run)."
     }
+    if (params.hq_quality_source == 'both' && (params.skip_checkm || !params.run_checkm1)) {
+        error "hq_quality_source='both' (pass in CheckM1 AND CheckM2) requires skip_checkm=false and run_checkm1=true. Use 'either', 'checkm1' or 'checkm2' when only one CheckM runs."
+    }
     log.info paramsSummaryLog(workflow)
 
     // --- Route ---

@@ -23,6 +23,10 @@ nextflow_pipeline {
             assert workflow.success
             assert workflow.trace.tasks().any { it.name.contains('FASTPLONG') }
             assert workflow.trace.tasks().any { it.name.contains('MYLOASM') }
+            // NANO_META_B is hybrid: its short reads polish its assembly, and only that
+            assert workflow.trace.tasks().any { it.name.contains('POLYPOLISH (NANO_META_B)') }
+            assert !workflow.trace.tasks().any { it.name.contains('POLYPOLISH (NANO_META_A)') }
+            assert workflow.trace.tasks().count { it.name.contains('AVIARY_RECOVER') } == 2
             assert workflow.trace.tasks().any { it.name.contains('AVIARY_RECOVER') }
             assert workflow.trace.tasks().any { it.name.contains('COVERM_GENOME_ONT') }
             assert workflow.trace.tasks().any { it.name.contains('GENOME_TAXONOMY_QC') || it.name.contains('GTDBTK_CLASSIFYWF') }
@@ -58,6 +62,37 @@ nextflow_pipeline {
             def header = path("$outputDir/00_read_stats/read_stat_report.tsv").readLines()[0].split('\t') as List
             assert header.containsAll(['Cleanifier_count', 'Cleanifier_percent'])
             assert header.indexOf('Cleanifier_count') > header.indexOf('Fastplong_percent')
+        }
+    }
+
+    test("nanopore_metagenome stub maps long comparison reads and expands the catalogue") {
+
+        options "-stub"
+
+        when {
+            params {
+                mode   = "nanopore_metagenome"
+                input  = "${projectDir}/assets/samplesheets/nanopore_metagenome.csv"
+                outdir = "$outputDir"
+                skip_host_removal = true
+                run_genomespot = false
+                run_checkm1 = false
+                skip_polypolish = true
+                comparison_reads = "${projectDir}/assets/samplesheets/nanopore_comparison_reads.csv"
+                comparison_assemblies = "${projectDir}/assets/samplesheets/comparison_assemblies.csv"
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert !workflow.trace.tasks().any { it.name.contains('POLYPOLISH') }
+            assert !workflow.trace.tasks().any { it.name.contains('NONPAREIL') }
+            assert workflow.trace.tasks().any { it.name.contains('FASTPLONG_COMPARISON') }
+            assert workflow.trace.tasks().any { it.name.contains('COVERM_GENOME_COMPARISON_ONT') }
+            assert !workflow.trace.tasks().any { it.name.contains('RPKM_') }
+            assert workflow.trace.tasks().any { it.name.contains('CDHIT_EXPANDED') }
+            assert path("$outputDir/33_comparison_reads/bin_mapping").exists()
+            assert path("$outputDir/34_comparison_assemblies").exists()
         }
     }
 }

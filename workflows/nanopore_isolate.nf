@@ -63,14 +63,19 @@ workflow NANOPORE_ISOLATE {
         ch_versions = ch_versions.mix(FASTQ_GZIP_TEST.out.versions)
     }
 
-    // Raw per-sample read/base totals -- the denominator for MAPPING_ASSESS's
-    // bases-mapped percentages. Only long-read totals are tracked in this
-    // workflow (no SEQKIT_STATS pass over the short reads), so the SR mapping
-    // assessment shares the same denominator as the existing Read_count_SR
-    // percent column already does.
+    // Raw per-sample read/base totals -- the denominators for MAPPING_ASSESS's
+    // bases-mapped percentages and the report's *_percent columns. Long- and
+    // short-read mappings each divide by their own platform's raw totals.
     ch_raw_stats = LONG_READ_QC.out.stats
         .filter { meta, stage, t -> stage == 'raw_long' }
         .map { meta, stage, t -> [ meta, t ] }
+    SEQKIT_STATS(INPUT_CHECK.out.reads_short.map { meta, reads -> [ meta, 'raw_short', reads ] })
+    ch_raw_stats_sr = SEQKIT_STATS.out.stats.map { meta, stage, t -> [ meta, t ] }
+    ch_versions = ch_versions.mix(SEQKIT_STATS.out.versions)
+
+    // Long-read tuples carry single_end:true and short-read tuples do not, so the two
+    // streams are joined on meta.id, never on the whole meta map.
+    def by_id = { ch -> ch.map { meta, f -> [ meta.id, meta, f ] } }
 
     ch_scaffold_counts = Channel.value([])
     ch_scaffold_sr     = Channel.value([])
@@ -93,9 +98,9 @@ workflow NANOPORE_ISOLATE {
         }
 
         if (!params.skip_polypolish) {
-            ch_hybrid_polish_in = ch_assembly
-                .join(ch_short)
-                .map { meta, assembly, reads -> [ meta, assembly, reads ] }
+            ch_hybrid_polish_in = by_id(ch_assembly)
+                .join(by_id(ch_short))
+                .map { id, meta, assembly, short_meta, reads -> [ meta, assembly, reads ] }
             POLYPOLISH(ch_hybrid_polish_in)
             ch_no_short = ch_assembly.filter { meta, assembly -> !meta.has_short_reads }
             ch_assembly = ch_no_short.mix(POLYPOLISH.out.assembly)
@@ -163,10 +168,11 @@ workflow NANOPORE_ISOLATE {
                 .join(ch_long)
                 .map { meta, scaffolds, reads -> [ meta, reads, scaffolds ] }
         )
+        // keep the short-read meta (single_end:false) so CoverM maps the pair coupled
         COVERM_CONTIG_SR(
-            ch_assembly
-                .join(ch_short)
-                .map { meta, scaffolds, reads -> [ meta, reads, scaffolds ] }
+            by_id(ch_assembly)
+                .join(by_id(ch_short))
+                .map { id, meta, scaffolds, short_meta, reads -> [ short_meta, reads, scaffolds ] }
         )
         ch_scaffold_counts = COVERM_CONTIG_ONT.out.counts.map { meta, t -> t }.collect().ifEmpty([])
         ch_scaffold_sr     = COVERM_CONTIG_SR.out.counts.map { meta, t -> t }.collect().ifEmpty([])
@@ -180,7 +186,7 @@ workflow NANOPORE_ISOLATE {
                 'Scaffolds'
             )
             MAPPING_ASSESS_SCAFFOLDS_SR(
-                COVERM_CONTIG_SR.out.bams.join(COVERM_CONTIG_SR.out.contig_map).join(ch_raw_stats),
+                COVERM_CONTIG_SR.out.bams.join(COVERM_CONTIG_SR.out.contig_map).join(ch_raw_stats_sr),
                 'Scaffolds_SR'
             )
             ch_assess = ch_assess
@@ -196,7 +202,7 @@ workflow NANOPORE_ISOLATE {
     // --- Read-stat report (per-sample read tracking across all steps) ---
     READ_STAT_REPORT(
         'isolate',
-        LONG_READ_QC.out.stats.map { meta, stage, t -> t }.collect(),
+        LONG_READ_QC.out.stats.mix(SEQKIT_STATS.out.stats).map { meta, stage, t -> t }.collect(),
         ch_scaffold_counts,
         ch_scaffold_sr,
         [],

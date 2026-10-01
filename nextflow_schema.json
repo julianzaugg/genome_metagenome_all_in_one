@@ -27,14 +27,14 @@
                     "format": "file-path",
                     "mimetype": "text/csv",
                     "schema": "assets/schema_comparison_reads.json",
-                    "description": "Samplesheet of external reads (sample, fastq_1, fastq_2) to QC/host-remove and map against this run's final dereplicated bin representatives and gene catalogue, for cross-cohort comparison -- never assembled or binned. illumina_metagenome only. Sample IDs must not collide with --input's or --comparison_assemblies's."
+                    "description": "Samplesheet of external reads to QC/host-remove and map against this run's final dereplicated bin representatives (and, for illumina_metagenome, the gene catalogue), for cross-cohort comparison -- never assembled or binned. Columns: sample, fastq_1, fastq_2 (illumina_metagenome) or sample, long_reads (nanopore_metagenome). Sample IDs must not collide with --input's or --comparison_assemblies's."
                 },
                 "comparison_assemblies": {
                     "type": "string",
                     "format": "file-path",
                     "mimetype": "text/csv",
                     "schema": "assets/schema_comparison_assemblies.json",
-                    "description": "Samplesheet of external, pre-binned assemblies (sample, assembly) whose genes are folded into the expanded gene catalogue, for cross-cohort comparison -- never binned. illumina_metagenome only. Sample IDs must not collide with --input's or --comparison_reads's."
+                    "description": "Samplesheet of external, pre-binned assemblies (sample, assembly) whose genes are folded into the expanded gene catalogue, for cross-cohort comparison -- never binned. Metagenome modes. Sample IDs must not collide with --input's or --comparison_reads's."
                 },
                 "outdir": {
                     "type": "string",
@@ -128,14 +128,14 @@
                 "skip_mobile_elements": { "type": "boolean", "description": "Skip the mobile-elements subworkflow: geNomad virus/plasmid prediction, CheckV quality assessment, and ANI-based clustering. All modes." },
                 "skip_porechop":        { "type": "boolean", "description": "Skip Porechop adapter trimming during long-read QC. Nanopore modes only." },
                 "skip_dorado_polish":   { "type": "boolean", "description": "Skip Dorado long-read consensus polishing after assembly. Nanopore modes only." },
-                "skip_polypolish":      { "type": "boolean", "description": "Skip Polypolish short-read hybrid polishing of the long-read assembly (only meaningful for samples that also have short reads). nanopore_isolate only." },
+                "skip_polypolish":      { "type": "boolean", "description": "Skip Polypolish short-read polishing of the long-read assembly (only meaningful for samples that also have fastq_1/fastq_2). nanopore_isolate (before DNAapler) and nanopore_metagenome (before Aviary)." },
                 "skip_comparative":     { "type": "boolean", "description": "Skip the isolate-comparative subworkflow (FastANI, ParSNP+Gubbins, Panaroo(+IQTree), chewBBACA). Conflicts with skip_annotation=true (comparative analysis needs Bakta output). Isolate modes only." },
-                "run_nonpareil":        { "type": "boolean", "default": true, "description": "Run Nonpareil sequencing-coverage/diversity estimation on clean reads. Metagenome modes only." },
-                "run_genomespot":       { "type": "boolean", "default": true, "description": "Run GenomeSPOT genome-trait prediction on representative genomes. All modes." },
-                "run_barrnap":          { "type": "boolean", "default": true, "description": "Run Barrnap rRNA prediction on representative genomes. All modes." },
-                "run_dram_bins":        { "type": "boolean", "default": false, "description": "Run per-bin DRAM annotation + distillation, in addition to gene-catalogue DRAM annotation. All modes." },
+                "run_nonpareil":        { "type": "boolean", "description": "Run Nonpareil sequencing-coverage/diversity estimation on clean reads (R1 only for paired reads). Metagenome modes only. Defaults to true for illumina_metagenome and false for nanopore_metagenome, since Nonpareil's redundancy model assumes low-error short reads." },
+                "run_genomespot":       { "type": "boolean", "default": true, "description": "Run GenomeSPOT genome-trait prediction on every genome: all bins (metagenome, before dereplication) or each assembly (isolate)." },
+                "run_barrnap":          { "type": "boolean", "default": true, "description": "Run Barrnap rRNA prediction on every genome: all bins (metagenome, before dereplication) or each assembly (isolate)." },
+                "run_dram_bins":        { "type": "boolean", "default": false, "description": "Run per-bin DRAM annotation + distillation on every bin (metagenome, before dereplication) or each assembly (isolate), in addition to gene-catalogue DRAM annotation." },
                 "run_checkm1":          { "type": "boolean", "default": true, "description": "Run CheckM1 lineage_wf alongside CheckM2; feeds hq_quality_source classification. All modes." },
-                "hq_quality_source":    { "type": "string", "enum": ["both", "checkm1", "checkm2"], "default": "both", "description": "Which CheckM report(s) classify a bin as HQ; a bin is HQ if it passes in any selected report." },
+                "hq_quality_source":    { "type": "string", "enum": ["either", "both", "checkm1", "checkm2"], "default": "either", "description": "Which CheckM report(s) classify a bin as HQ (completeness - 3*contamination >= 50): checkm1, checkm2, either (passes in at least one) or both (passes in CheckM1 AND CheckM2; needs both to run)." },
                 "within_sample_dereplication": { "type": "string", "enum": ["none", "sample", "group"], "default": "none", "description": "Dereplicate bins within each sample ('sample') or each samplesheet group ('group'), selecting HQ MAGs within that unit; 'none' disables it. Independent of skip_dereplication (across-all-samples): across-only = skip_dereplication false + none; within-only = skip_dereplication true + sample/group; both = skip_dereplication false + sample/group. Requires skip_binning=false. Metagenome modes only." },
                 "run_fastani":          { "type": "boolean", "default": true, "description": "Run FastANI within the isolate-comparative subworkflow (only takes effect when skip_comparative=false). Isolate modes only." },
                 "run_parsnp":           { "type": "boolean", "default": true, "description": "Run ParSNP+Gubbins core-genome alignment within the isolate-comparative subworkflow (only takes effect when skip_comparative=false). Isolate modes only." },
@@ -157,6 +157,7 @@
                 "catalogue_clusterer": { "type": "string", "enum": ["cdhit", "mmseqs"], "default": "cdhit", "description": "NOT CURRENTLY IMPLEMENTED — accepted but ignored; the gene catalogue always uses CD-HIT regardless of this value." },
                 "catalogue_identities": { "type": "string", "default": "1.0,0.9", "description": "Comma-separated CD-HIT identities; first is the primary catalogue (used for CDS/membership/DRAM)." },
                 "rpkm_min_read_length": { "type": "integer", "default": 140, "description": "Minimum selected R1 read length retained for RPKM DIAMOND blastx." },
+                "metaspades_singletons": { "type": "boolean", "default": false, "description": "Also pass fastp's unpaired reads (a read whose mate failed QC, R1 + R2 combined) to metaSPAdes as -s, after their own host removal, as run_metaspades.sh did with trimmomatic singletons. illumina_metagenome only; needs fastp (skip_qc=false). Samples with no singletons assemble paired-only." },
                 "core_alignment":      { "type": "string", "enum": ["parsnp", "snippy"], "default": "parsnp", "description": "NOT CURRENTLY IMPLEMENTED — accepted but ignored; isolate-comparative always runs ParSNP (gated by run_parsnp), there is no Snippy path." },
                 "tree_builder":        { "type": "string", "enum": ["iqtree", "raxml"], "default": "iqtree", "description": "NOT CURRENTLY IMPLEMENTED — accepted but ignored; the isolate-comparative core-gene tree always uses IQTree (gated by run_tree), there is no RAxML path. Not to be confused with marker_tree_builder, which is wired up." },
                 "sylph_profile_args":  { "type": "string", "description": "Optional extra arguments for sylph profile." },

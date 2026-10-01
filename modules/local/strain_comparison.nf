@@ -50,7 +50,8 @@ process STRAIN_GENOME_FILTER {
     script:
     def min_completeness  = task.ext.min_completeness  ?: 90
     def max_contamination = task.ext.max_contamination ?: 5
-    def hq_source         = task.ext.hq_source ?: 'both'
+    def hq_source         = task.ext.hq_source ?: 'either'
+    def need_all          = hq_source == 'both' ? 1 : 0
     """
     # Collect (genome, completeness, contamination, source) from the selected report(s).
     # Column positions differ between CheckM1's tab table and CheckM2's quality report,
@@ -65,7 +66,7 @@ process STRAIN_GENOME_FILTER {
         ' "\$1" >> qc_values.tsv
     }
     case "${hq_source}" in
-        both)    read_qc "${checkm2_report}" checkm2; read_qc "${checkm1_report}" checkm1 ;;
+        either|both) read_qc "${checkm2_report}" checkm2; read_qc "${checkm1_report}" checkm1 ;;
         checkm2) read_qc "${checkm2_report}" checkm2 ;;
         checkm1) read_qc "${checkm1_report}" checkm1 ;;
     esac
@@ -78,15 +79,19 @@ process STRAIN_GENOME_FILTER {
     done
     sort -u genome_names.txt -o genome_names.txt
 
-    # One verdict per genome, in a single pass. A genome passes if ANY selected report
-    # passes it (matching hq_quality_source semantics elsewhere in the pipeline). A
+    # One verdict per genome, in a single pass. 'either' passes a genome if ANY selected
+    # report passes it; 'both' needs EVERY report it appears in to pass it (matching
+    # hq_quality_source elsewhere). The reported values come from the deciding report. A
     # genome present in no report is KEPT and flagged 'unscored', so user-supplied
     # reference genomes -- which never appear in the MAG CheckM reports -- are not
     # silently dropped.
-    awk -F '\\t' -v mc=${min_completeness} -v xc=${max_contamination} '
+    awk -F '\\t' -v mc=${min_completeness} -v xc=${max_contamination} -v need_all=${need_all} '
         FNR==NR {
             g=\$1; ok = (\$2 >= mc && \$3 <= xc)
-            if (!(g in seen) || (ok && !pass[g])) { comp[g]=\$2; cont[g]=\$3; src[g]=\$4; pass[g]=ok }
+            first = !(g in seen)
+            if (first) { pass[g] = need_all ? 1 : 0 }
+            pass[g] = need_all ? (pass[g] && ok) : (pass[g] || ok)
+            if (first || (need_all ? !ok : ok)) { comp[g]=\$2; cont[g]=\$3; src[g]=\$4 }
             seen[g]=1
             next
         }

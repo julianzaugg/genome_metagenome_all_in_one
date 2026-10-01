@@ -32,7 +32,7 @@ include { COMPARISON_READS }      from '../subworkflows/local/comparison_reads'
 include { FASTP }                       from '../modules/nf-core/fastp/main'
 include { SPADES }                      from '../modules/nf-core/spades/main'
 include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict/main'
-include { PREP_ASSEMBLY }               from '../modules/local/util'
+include { PREP_ASSEMBLY; COLLECT_SINGLETONS } from '../modules/local/util'
 include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
 include { COVERM_CLUSTER; COVERM_CLUSTER_HQ; COVERM_CLUSTER_HQ_REF; COVERM_GENOME; COVERM_GENOME as COVERM_GENOME_HQ; COVERM_GENOME as COVERM_GENOME_HQ_DEREP; COVERM_GENOME as COVERM_GENOME_HQ_REF; COVERM_CONTIG } from '../modules/local/coverm'
 include { COVERM_CLUSTER_WS; COVERM_CLUSTER_HQ_WS; COVERM_GENOME_PAIRED as COVERM_GENOME_WS_DEREP; COVERM_GENOME_PAIRED as COVERM_GENOME_WS_HQ } from '../modules/local/coverm'
@@ -42,12 +42,14 @@ include { PYRODIGAL as PYRODIGAL_SCAFFOLDS } from '../modules/local/pyrodigal'
 include { NONPAREIL }                   from '../modules/local/nonpareil'
 include { SEQKIT_STATS }                from '../modules/local/read_stats'
 include { READ_STAT_REPORT }            from '../modules/local/read_stat_report'
-include { CLEANIFIER_INDEX }            from '../modules/local/host_removal'
+include { CLEANIFIER_INDEX; CLEANIFIER as CLEANIFIER_SINGLETONS } from '../modules/local/host_removal'
 include { FASTQ_GZIP_TEST }             from '../modules/local/validate'
 include { DUMP_SOFTWARE_VERSIONS }      from '../modules/local/dump_software_versions'
 
 // resolve a possibly-null db param to a path or an empty list (for optional inputs)
 def optpath = { p -> p ? file(p, checkIfExists: true) : [] }
+// true if a gzipped FASTQ holds at least one byte of data (reads only its first byte)
+def gz_has_reads = { p -> p.withInputStream { s -> new java.util.zip.GZIPInputStream(s).read() != -1 } }
 
 workflow ILLUMINA_METAGENOME {
 
@@ -101,6 +103,11 @@ workflow ILLUMINA_METAGENOME {
         error "--comparison_reads maps external reads to the final dereplicated bin representatives, which needs binning + dereplication. Rerun with --skip_binning false --skip_dereplication false, or unset --comparison_reads."
     }
 
+    if (params.metaspades_singletons && params.skip_qc) {
+        error "--metaspades_singletons takes the unpaired reads fastp writes, so it needs fastp. Rerun with --skip_qc false, or unset --metaspades_singletons."
+    }
+    def use_singletons = params.metaspades_singletons && !params.skip_assembly
+
     INPUT_CHECK(params.input, params.mode)
     FASTQ_GZIP_TEST(INPUT_CHECK.out.reads_short)
     ch_reads = FASTQ_GZIP_TEST.out.reads
@@ -111,12 +118,22 @@ workflow ILLUMINA_METAGENOME {
 
     // --- QC ---
     if (!params.skip_qc) {
-        FASTP(ch_reads.map { meta, reads -> [ meta, reads, [] ] }, false, false, false)
+        // save_trimmed_fail also writes --unpaired1/--unpaired2 (reads whose mate failed)
+        FASTP(ch_reads.map { meta, reads -> [ meta, reads, [] ] }, false, use_singletons, false)
         ch_qc = FASTP.out.reads
         ch_read_stats = ch_read_stats.mix(FASTP.out.reads.map { meta, reads -> [ meta, 'fastp', reads ] })
         // FASTP emits versions via topic: versions (collected globally below)
     } else {
         ch_qc = ch_reads
+    }
+
+    // --- Singletons for metaSPAdes -s (opt-in): fastp's unpaired survivors, R1 + R2 ---
+    ch_singletons = Channel.empty()
+    if (use_singletons) {
+        COLLECT_SINGLETONS(FASTP.out.reads_fail)
+        ch_singletons = COLLECT_SINGLETONS.out.reads
+            .filter { meta, s -> gz_has_reads(s) }
+            .map { meta, s -> [ meta + [single_end: true], s ] }
     }
 
     // --- Read profiling (on raw reads, as per the bash workflow) ---
@@ -152,6 +169,11 @@ workflow ILLUMINA_METAGENOME {
         ch_clean = HOST_REMOVAL.out.reads
         ch_read_stats = ch_read_stats.mix(HOST_REMOVAL.out.reads.map { meta, reads -> [ meta, 'cleanifier', reads ] })
         ch_versions = ch_versions.mix(HOST_REMOVAL.out.versions)
+        if (use_singletons) {
+            CLEANIFIER_SINGLETONS(ch_singletons, ch_cleanifier_index)
+            ch_singletons = CLEANIFIER_SINGLETONS.out.reads.filter { meta, s -> gz_has_reads(s) }
+            ch_versions = ch_versions.mix(CLEANIFIER_SINGLETONS.out.versions)
+        }
     } else {
         ch_clean = ch_qc
     }
@@ -195,9 +217,17 @@ workflow ILLUMINA_METAGENOME {
     // --- Assembly (metaSPAdes) ---
     ch_assembly = Channel.empty()
     if (!params.skip_assembly) {
-        SPADES(ch_clean.map { meta, reads -> [ meta, reads, [], [] ] }, [], [])
+        // [R1, R2] or, with --metaspades_singletons, [R1, R2, singletons] (patched module: -s).
+        // Joined on id: the singletons carry single_end:true. Samples with none stay paired-only.
+        ch_spades_in = ch_clean
+            .map { meta, reads -> [ meta.id, meta, reads ] }
+            .join(ch_singletons.map { meta, s -> [ meta.id, s ] }, remainder: true)
+            .filter { id, meta, reads, singles -> meta != null }
+            .map { id, meta, reads, singles -> [ meta, singles ? reads + [ singles ] : reads, [], [] ] }
+        SPADES(ch_spades_in, [], [])
         PREP_ASSEMBLY(SPADES.out.scaffolds)
-        ch_assembly = PREP_ASSEMBLY.out.assembly    // [ meta, scaffolds.fasta ]
+        ch_assembly = PREP_ASSEMBLY.out.assembly    // [ meta, scaffolds.fasta ], scaffolds >= 500 bp
+        ch_versions = ch_versions.mix(PREP_ASSEMBLY.out.versions)
         // SPADES emits versions via topic: versions (collected globally below)
     }
 
@@ -515,7 +545,9 @@ workflow ILLUMINA_METAGENOME {
             (build_expanded_catalogue ? GENE_CATALOGUE.out.expanded_catalogue : GENE_CATALOGUE.out.catalogue)
         COMPARISON_READS(
             COMPARISON_INPUT_CHECK.out.reads_short,
+            false,
             !params.skip_qc,
+            false,
             !params.skip_host_removal,
             params.skip_host_removal ? Channel.value([]) : ch_cleanifier_index,
             !params.skip_sylph,

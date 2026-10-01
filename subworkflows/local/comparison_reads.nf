@@ -2,10 +2,13 @@
  * COMPARISON_READS — map an external set of reads (never assembled or
  * binned) against what this run recovered, for cross-cohort comparison:
  *   - sylph + singlem community profiling (raw reads, mirrors READ_PROFILING)
- *   - QC + host removal (mirrors the main sample path)
+ *   - QC + host removal (mirrors the main sample path: fastp for paired short
+ *     reads, Porechop + fastplong for long reads)
  *   - CoverM mapping against the final dereplicated bin representatives
+ *     (minimap2-sr or minimap2-ont)
  *   - RPKM-style DIAMOND mapping against the gene catalogue (base or
- *     expanded tier, chosen by the caller)
+ *     expanded tier, chosen by the caller) -- short reads only: the R1 blastx
+ *     model has no long-read equivalent
  *
  * Every process here is an ALIASED import of an already-existing process
  * (X as X_COMPARISON) — required, not stylistic: several of the underlying
@@ -21,9 +24,13 @@ include { SYLPH_SKETCH as SYLPH_SKETCH_COMPARISON;
           SYLPH_TAX as SYLPH_TAX_COMPARISON }                from '../../modules/local/sylph'
 include { SINGLEM_PIPE as SINGLEM_PIPE_COMPARISON }          from '../../modules/local/singlem'
 include { FASTP as FASTP_COMPARISON }                        from '../../modules/nf-core/fastp/main'
+include { PORECHOP as PORECHOP_COMPARISON;
+          FASTPLONG as FASTPLONG_COMPARISON }                from '../../modules/local/long_reads'
 include { CLEANIFIER as CLEANIFIER_COMPARISON }               from '../../modules/local/host_removal'
-include { COVERM_GENOME as COVERM_GENOME_COMPARISON }        from '../../modules/local/coverm'
-include { MAPPING_ASSESS as MAPPING_ASSESS_COMPARISON }      from '../../modules/local/mapping_assessment'
+include { COVERM_GENOME as COVERM_GENOME_COMPARISON;
+          COVERM_GENOME as COVERM_GENOME_COMPARISON_ONT }    from '../../modules/local/coverm'
+include { MAPPING_ASSESS as MAPPING_ASSESS_COMPARISON;
+          MAPPING_ASSESS as MAPPING_ASSESS_COMPARISON_ONT }  from '../../modules/local/mapping_assessment'
 include {
     RPKM_FILTER_READS as RPKM_FILTER_READS_COMPARISON;
     RPKM_SINGLEM_MARKERS as RPKM_SINGLEM_MARKERS_COMPARISON;
@@ -37,8 +44,10 @@ include {
 
 workflow COMPARISON_READS {
     take:
-    reads                   // [ meta, [fastq_1, fastq_2] ]  from a second INPUT_CHECK invocation
+    reads                   // [ meta, [fastq_1, fastq_2] ] or [ meta, long_reads ], from a second INPUT_CHECK invocation
+    long_reads              // bool: nanopore comparison reads (long-read QC, ONT mapper, no gene mapping)
     run_qc                  // bool = !params.skip_qc
+    run_porechop            // bool = !params.skip_porechop (long reads only)
     run_host_removal        // bool = !params.skip_host_removal
     cleanifier_index        // value channel [filter, info]; ignored if run_host_removal is false
     run_sylph
@@ -50,7 +59,7 @@ workflow COMPARISON_READS {
     run_bin_mapping          // bool = !params.skip_dereplication && !params.skip_read_mapping
     bin_representatives      // ch_reps (collected fasta paths)
     run_mapping_assessment   // bool = !params.skip_mapping_assessment
-    run_gene_mapping         // bool = !params.skip_gene_catalogue
+    run_gene_mapping         // bool = !params.skip_gene_catalogue; ignored for long reads
     gene_catalogue           // base or expanded GENE_CATALOGUE output, chosen by the caller
     singlem_marker_dbs
     singlem_marker_lengths
@@ -100,12 +109,22 @@ workflow COMPARISON_READS {
     }
 
     // --- QC ---
-    if (run_qc) {
+    ch_qc = reads
+    if (long_reads) {
+        if (run_porechop) {
+            PORECHOP_COMPARISON(ch_qc)
+            ch_qc = PORECHOP_COMPARISON.out.reads
+            ch_versions = ch_versions.mix(PORECHOP_COMPARISON.out.versions)
+        }
+        if (run_qc) {
+            FASTPLONG_COMPARISON(ch_qc)
+            ch_qc = FASTPLONG_COMPARISON.out.reads
+            ch_versions = ch_versions.mix(FASTPLONG_COMPARISON.out.versions)
+        }
+    } else if (run_qc) {
         FASTP_COMPARISON(reads.map { meta, r -> [ meta, r, [] ] }, false, false, false)
         ch_qc = FASTP_COMPARISON.out.reads
-        // FASTP emits versions via topic: versions (collected globally in illumina_metagenome.nf)
-    } else {
-        ch_qc = reads
+        // FASTP emits versions via topic: versions (collected globally in the calling workflow)
     }
 
     // --- Host removal ---
@@ -120,23 +139,32 @@ workflow COMPARISON_READS {
     // --- Map to the final dereplicated bin representatives ---
     ch_bin_abundance = Channel.empty()
     if (run_bin_mapping) {
-        COVERM_GENOME_COMPARISON(ch_clean, bin_representatives)
-        ch_bin_abundance = COVERM_GENOME_COMPARISON.out.abundance
-        ch_versions = ch_versions.mix(COVERM_GENOME_COMPARISON.out.versions)
+        if (long_reads) {
+            COVERM_GENOME_COMPARISON_ONT(ch_clean, bin_representatives)
+            ch_coverm = COVERM_GENOME_COMPARISON_ONT.out
+        } else {
+            COVERM_GENOME_COMPARISON(ch_clean, bin_representatives)
+            ch_coverm = COVERM_GENOME_COMPARISON.out
+        }
+        ch_bin_abundance = ch_coverm.abundance
+        ch_versions = ch_versions.mix(ch_coverm.versions)
 
         if (run_mapping_assessment) {
-            MAPPING_ASSESS_COMPARISON(
-                COVERM_GENOME_COMPARISON.out.bams.join(COVERM_GENOME_COMPARISON.out.contig_map).join(ch_raw_stats),
-                'Comparison_vs_Bins'
-            )
-            ch_versions = ch_versions.mix(MAPPING_ASSESS_COMPARISON.out.versions)
+            ch_assess_in = ch_coverm.bams.join(ch_coverm.contig_map).join(ch_raw_stats)
+            if (long_reads) {
+                MAPPING_ASSESS_COMPARISON_ONT(ch_assess_in, 'Comparison_vs_Bins')
+                ch_versions = ch_versions.mix(MAPPING_ASSESS_COMPARISON_ONT.out.versions)
+            } else {
+                MAPPING_ASSESS_COMPARISON(ch_assess_in, 'Comparison_vs_Bins')
+                ch_versions = ch_versions.mix(MAPPING_ASSESS_COMPARISON.out.versions)
+            }
         }
     }
 
     // --- Map to the gene catalogue (RPKM-style; own diamond db + own SingleM
     // marker blast, since these are different reads from the main RPKM run) ---
     ch_gene_rpkm = Channel.empty()
-    if (run_gene_mapping) {
+    if (run_gene_mapping && !long_reads) {
         ch_rpkm_r1 = ch_clean.map { meta, r -> [ meta, meta.single_end ? r : r[0] ] }
         RPKM_FILTER_READS_COMPARISON(ch_rpkm_r1, min_read_length)
         ch_versions = ch_versions.mix(RPKM_FILTER_READS_COMPARISON.out.versions)
