@@ -28,6 +28,7 @@ include { BOWTIE2_STRAIN_ALIGN  } from '../../modules/local/strain_comparison'
 include { INSTRAIN_PROFILE      } from '../../modules/local/strain_comparison'
 include { INSTRAIN_COMPARE      } from '../../modules/local/strain_comparison'
 include { INSTRAIN_SUMMARISE    } from '../../modules/local/strain_comparison'
+include { TRACS_PREFLIGHT       } from '../../modules/local/strain_comparison'
 include { TRACS_BUILD_DB        } from '../../modules/local/strain_comparison'
 include { TRACS_ALIGN           } from '../../modules/local/strain_comparison'
 include { TRACS_ALIGN as TRACS_ALIGN_ONT } from '../../modules/local/strain_comparison'
@@ -113,6 +114,9 @@ workflow STRAIN_COMPARISON {
     }
 
     if (run_tracs) {
+        // No inputs, so it runs at launch: a CPU-incompatible image fails in minutes.
+        TRACS_PREFLIGHT()
+
         // A build-db database embeds both the sourmash index and the genomes themselves,
         // so `tracs align` never falls back to downloading GTDB references from Genbank.
         TRACS_BUILD_DB(ch_ref_genomes)
