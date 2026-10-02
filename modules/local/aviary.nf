@@ -29,11 +29,11 @@ process AVIARY_RECOVER {
     def long_read_type   = task.ext.long_read_type ?: 'ont'
     def reads_arg        = meta.single_end ? "--longreads ${reads} --long-read-type ${long_read_type}" : "-1 ${reads[0]} -2 ${reads[1]}"
     def extra_binners    = params.aviary_extra_binners ? "--extra-binners ${params.aviary_extra_binners}" : ''
-    def aviary_container_hint = params.aviary_container ?: "${params.container_base}/aviary_0.13.0.sif"
+    def aviary_container_hint = params.aviary_container ?: "${params.container_base}/aviary_0.13.3.sif"
     """
     if ! command -v pixi >/dev/null 2>&1; then
         cat >&2 <<'EOF'
-ERROR: Aviary 0.13.0 requires pixi inside the AVIARY_RECOVER runtime image.
+ERROR: Aviary 0.13.3 requires pixi inside the AVIARY_RECOVER runtime image.
 The quay.io/biocontainers/aviary:0.13.0--pyhdfd78af_0 image contains the Aviary
 CLI but not pixi, so Aviary's internal Snakemake rules fail with:
   /usr/bin/bash: line 1: pixi: command not found

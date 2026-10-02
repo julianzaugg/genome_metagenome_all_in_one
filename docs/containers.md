@@ -27,12 +27,12 @@ self-contained for this pipeline, need local images:
 
 | Image (`<name>.sif`)   | Why a local image | Used by |
 |------------------------|-------------------|---------|
-| `aviary_0.13.0`        | Aviary 0.13.0 requires `pixi` and prebuilt pixi environments; the quay.io biocontainer has the CLI but not `pixi` | metagenome bin recovery |
+| `aviary_0.13.3`        | Aviary 0.13.3 requires `pixi` and prebuilt pixi environments; the quay.io biocontainer has the CLI but not `pixi` | metagenome bin recovery |
 | `dorado_1.4.0`         | ONT-proprietary, not on biocontainers (see Dorado SIF below) | Nanopore basecall/polish |
 | `genomespot_1.0`       | not packaged on biocontainers | bin growth prediction (optional) |
 | `tracs_1.1.1`          | **only if the biocontainer SIGILLs on your CPU** — upstream compiles with `-march=native`, so the published image is not portable (see below) | strain comparison (`--run_tracs`) |
 
-For the **Illumina-metagenome path**, provide `aviary_0.13.0.sif` when binning is
+For the **Illumina-metagenome path**, provide `aviary_0.13.3.sif` when binning is
 enabled. Host removal still uses the `cleanifier` biocontainer. Supply either a
 prebuilt `--cleanifier_db` index or a FASTA with `--host_ref` so the pipeline can
 build the index. For Nanopore POD5 basecalling or Dorado polishing, you'll also
@@ -45,11 +45,11 @@ polishing.
 > shared image directory.
 
 Caveats:
-- **Aviary** 0.13.0 calls `pixi run` from inside its Snakemake rules. Do not use
+- **Aviary** 0.13.3 calls `pixi run` from inside its Snakemake rules. Do not use
   `quay.io/biocontainers/aviary:0.13.0--pyhdfd78af_0` for `AVIARY_RECOVER`; it
   fails with `pixi: command not found`. Build the upstream-style image, convert
-  it to `aviary_0.13.0.sif`, and place it under `params.container_base`, or pass
-  `--aviary_container /path/to/aviary_0.13.0.sif`.
+  it to `aviary_0.13.3.sif`, and place it under `params.container_base`, or pass
+  `--aviary_container /path/to/aviary_0.13.3.sif`.
 - **CHECKV_CLUSTER** uses the same Galaxy CheckV SIF as `CHECKV_ENDTOEND` for
   blast+ plus the vendored stdlib `anicalc.py`/`aniclust.py`. The standalone
   `blast` image does not ship Python in all builds.
@@ -71,14 +71,14 @@ so aviary starts without pixi at the outer level.
 
 ```bash
 # On the machine where the SIF will be used (e.g. page, Bunya)
-apptainer pull docker://julianzaugg/aviary:0.13.0
-mv aviary_0.13.0.sif /path/to/gmaio/containers/
+apptainer pull docker://julianzaugg/aviary:0.13.3
+mv aviary_0.13.3.sif /path/to/gmaio/containers/
 ```
 
 **Verify:**
 
 ```bash
-apptainer run containers/aviary_0.13.0.sif --help
+apptainer run containers/aviary_0.13.3.sif --help
 ```
 
 **Rebuild the Docker image** (e.g. to update the aviary version):
@@ -98,11 +98,17 @@ apptainer run containers/aviary_0.13.0.sif --help
 - If pixi still hits read-only filesystem errors during a real run, add
   `runOptions = '--writable-tmpfs'` to the `apptainer {}` block in your
   local config.
+  That layer is RAM-backed and small, so a long run can fail mid-way with
+  `No space left on device` even with plenty of free disk.
+  In that case give `AVIARY_RECOVER` a disk-backed overlay instead (upstream
+  Aviary's recommendation), e.g.
+  `withName: 'AVIARY_RECOVER' { containerOptions = '--overlay /scratch/aviary-overlay:rw' }`.
+  Do not share one writable overlay between concurrently running tasks.
 - The SIF requires `procps` (`ps`) for Nextflow task metrics. Images built
   from commit `21db7ff` onward include it. For older SIFs, add
   `runOptions = '--bind /usr/bin/ps:/usr/bin/ps'` to the `apptainer {}` block.
 
-If your image lives elsewhere, pass `--aviary_container /path/to/aviary_0.13.0.sif`
+If your image lives elsewhere, pass `--aviary_container /path/to/aviary_0.13.3.sif`
 or set that parameter in a profile.
 
 ### TRACS SIF (only if the biocontainer crashes)

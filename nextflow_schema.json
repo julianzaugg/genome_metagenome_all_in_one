@@ -62,7 +62,7 @@
                 },
                 "aviary_container": {
                     "type": "string",
-                    "description": "Optional explicit Aviary .sif path. If unset, AVIARY_RECOVER uses ${container_base}/aviary_0.13.0.sif."
+                    "description": "Optional explicit Aviary .sif path. If unset, AVIARY_RECOVER uses ${container_base}/aviary_0.13.3.sif."
                 },
                 "tracs_container": {
                     "type": "string",
