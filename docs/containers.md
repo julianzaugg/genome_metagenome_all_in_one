@@ -108,7 +108,9 @@ or set that parameter in a profile.
 ### TRACS SIF (only if the biocontainer crashes)
 
 `--run_tracs` uses `quay.io/biocontainers/tracs` by default and needs no local
-image. But if `TRACS_BUILD_DB` (or any `TRACS_*` process) dies like this:
+image.
+The pipeline checks this at launch: `TRACS_PREFLIGHT` runs each TRACS C++ kernel on tiny inputs, so an incompatible image fails within minutes of starting, with a message pointing here.
+The failure looks like this:
 
 ```
 Command error:
