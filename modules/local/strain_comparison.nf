@@ -406,31 +406,21 @@ process INSTRAIN_SUMMARISE {
 
 /*
  * Fail fast if the TRACS image cannot run on this CPU. TRACS compiles its C++
- * extension with -march=native, so an image built on a newer CPU dies with SIGILL
- * (exit 132). With no inputs this runs at launch, not days later at TRACS_BUILD_DB.
- * It imports the extension and calls each of its kernels on tiny inputs.
+ * extension for a fixed CPU target, so an image built for a newer CPU dies with
+ * SIGILL (exit 132). With no inputs this runs at launch, not days later.
  */
 process TRACS_PREFLIGHT {
     label 'process_single'
 
     script:
     """
-    printf '>a\\nACGTACGTACGTACGTACGT\\n>b\\nACGTACGTACGAACGTACGT\\n>c\\nACGTTCGTACGTACGTACGA\\n' > msa.fasta
-
     set +e
-    python - <<'EOF'
-    import numpy as np
-    from TRACS import pairsnp, calculate_posteriors, trans_dist
-    pairsnp(fasta=['msa.fasta'], n_threads=1, dist=1000000, filter=False)
-    calculate_posteriors(np.random.default_rng(0).random((1000, 4)) * 10, [1.0, 0.5, 0.1, 0.05], False, 0.01)
-    trans_dist([0, 1, 5], [0.0, 0.0, 0.0], 10.0, 0.1, 1e-6)
-    print('TRACS C++ extension OK on this CPU')
-    EOF
+    tracs_smoke_test.py
     rc=\$?
     set -e
 
     if [ "\$rc" -eq 132 ]; then
-        echo "ERROR: the TRACS container crashed with 'Illegal instruction' (SIGILL): it was compiled for a newer CPU than \$(hostname) has. Build a TRACS image on this host and pass it with --tracs_container: apptainer build containers/tracs_1.1.1.sif containers/tracs_1.1.1.def (see docs/containers.md, 'TRACS SIF'). Or rerun without --run_tracs." >&2
+        echo "ERROR: the TRACS container crashed with 'Illegal instruction' (SIGILL): it was compiled for a newer CPU than \$(hostname) has. Unset --tracs_container to use the portable default image, or rerun without --run_tracs. See docs/containers.md, 'TRACS image'." >&2
     fi
     exit \$rc
     """

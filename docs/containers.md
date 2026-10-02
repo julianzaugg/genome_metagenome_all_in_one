@@ -30,7 +30,6 @@ self-contained for this pipeline, need local images:
 | `aviary_0.13.0`        | Aviary 0.13.0 requires `pixi` and prebuilt pixi environments; the quay.io biocontainer has the CLI but not `pixi` | metagenome bin recovery |
 | `dorado_1.4.0`         | ONT-proprietary, not on biocontainers (see Dorado SIF below) | Nanopore basecall/polish |
 | `genomespot_1.0`       | not packaged on biocontainers | bin growth prediction (optional) |
-| `tracs_1.1.1`          | **only if the biocontainer SIGILLs on your CPU** — upstream compiles with `-march=native`, so the published image is not portable (see below) | strain comparison (`--run_tracs`) |
 
 For the **Illumina-metagenome path**, provide `aviary_0.13.0.sif` when binning is
 enabled. Host removal still uses the `cleanifier` biocontainer. Supply either a
@@ -53,9 +52,8 @@ Caveats:
 - **CHECKV_CLUSTER** uses the same Galaxy CheckV SIF as `CHECKV_ENDTOEND` for
   blast+ plus the vendored stdlib `anicalc.py`/`aniclust.py`. The standalone
   `blast` image does not ship Python in all builds.
-- **TRACS** works from the quay.io biocontainer on many hosts, but not all — see
-  the TRACS SIF section below. It is wired to the biocontainer by default and
-  only needs a local image if it crashes with exit status 132.
+- **TRACS** uses a portable image built by this repo's CI, not the biocontainer.
+  See the TRACS image section below.
 
 ### Aviary SIF
 
@@ -105,104 +103,63 @@ apptainer run containers/aviary_0.13.0.sif --help
 If your image lives elsewhere, pass `--aviary_container /path/to/aviary_0.13.0.sif`
 or set that parameter in a profile.
 
-### TRACS SIF (only if the biocontainer crashes)
+### TRACS image
 
-`--run_tracs` uses `quay.io/biocontainers/tracs` by default and needs no local
-image.
-The pipeline checks this at launch: `TRACS_PREFLIGHT` runs each TRACS C++ kernel on tiny inputs, so an incompatible image fails within minutes of starting, with a message pointing here.
-The failure looks like this:
+`--run_tracs` uses `ghcr.io/julianzaugg/tracs:1.1.1-x86-64-v2` by default, which is pulled like any biocontainer and needs no local image.
 
-```
-Command error:
-  .command.sh: line 2: 51 Illegal instruction (core dumped) tracs build-db ...
-Command exit status:
-  132
-```
-
-that is `SIGILL` — the binary uses CPU instructions your host does not have.
-
-**Cause.** TRACS's `setup.py` hard-codes
+**Why not the biocontainer.** TRACS's `setup.py` hard-codes
 
 ```python
 extra_compile_args = ["-O3", "-ffast-math", "-march=native"]
 ```
 
-so its pybind11 extension is compiled for whatever CPU built it. bioconda's
-build host is therefore baked into the published image: it runs on CPUs at
-least as new as that machine, and SIGILLs on anything older. Upstream issue
-[#8](https://github.com/gtonkinhill/tracs/issues/8) is exactly this failure and
-is *closed*, but no fix ever landed — the reporter closed it after a bioconda
-rebuild happened to suit their hardware. The flag is still present on `main`
-(v1.1.1, the newest release and newest build). So there is no version to
-upgrade to, trying other build tags is a coin flip, and an image that works
-today can break on a future rebuild.
+so its C++ extension is compiled for whatever CPU built it.
+The bioconda image therefore runs only on CPUs at least as new as bioconda's build host, and crashes on anything older:
 
-**Fix — build it on the machine that will run it**, so `-march=native` targets
-your own CPU:
+```
+Command error:
+  .command.sh: line 21: 384 Illegal instruction (core dumped) tracs build-db ...
+Command exit status:
+  132
+```
+
+Upstream issue [#8](https://github.com/gtonkinhill/tracs/issues/8) reports exactly this and was closed without a fix; the flag is still in v1.1.1, the newest release.
+
+**How the default image is built.** [`containers/tracs/Dockerfile`](../containers/tracs/Dockerfile) builds TRACS from source with `-march=native` patched to `-march=x86-64-v2` (SSE4.2, every x86-64 server CPU since about 2009).
+The [`TRACS image`](../.github/workflows/tracs-image.yml) GitHub Actions workflow builds it on every change to those files and, before pushing to GHCR from `main`, checks that:
+
+- the extension contains no AVX/AVX-512 instructions (`objdump`);
+- [`bin/tracs_smoke_test.py`](../bin/tracs_smoke_test.py), which calls every TRACS C++ kernel, passes on an emulated 2008 Nehalem CPU (`qemu-x86_64 -cpu Nehalem`);
+- the bioconda image fails that same test, which proves the emulated CPU check can fail.
+
+Images are tagged `1.1.1-x86-64-v2` (what the pipeline uses) and `1.1.1-x86-64-v2-<commit sha>` (immutable, for pinning).
+To change the TRACS version or CPU target, edit `TRACS_VERSION` / `TRACS_MARCH` in the workflow and push to `main`.
+`x86-64-v3` (AVX2, about 2013+) may run TRACS's kernels slightly faster, but alignment, not these kernels, dominates TRACS run time.
+
+**Launch-time check.** Whatever image is used, `TRACS_PREFLIGHT` runs the same smoke test as soon as the pipeline starts.
+An image that cannot run on the host fails within minutes, with a message pointing here, instead of days later at `TRACS_BUILD_DB`.
+On a cluster, it runs on one node, so it cannot vouch for nodes with different CPUs.
+
+**Overriding.** `--tracs_container` accepts any image URI or `.sif` path, e.g. a pre-pulled copy for offline nodes:
 
 ```bash
-# On the compute host (page, Bunya, ...) -- NOT on a newer machine
-apptainer build containers/tracs_1.1.1.sif containers/tracs_1.1.1.def
+apptainer pull containers/tracs_1.1.1-x86-64-v2.sif docker://ghcr.io/julianzaugg/tracs:1.1.1-x86-64-v2
+nextflow run . ... --run_tracs true --tracs_container containers/tracs_1.1.1-x86-64-v2.sif
 ```
 
-The build takes a few minutes (~380 MB of conda packages plus the C++
-extension). It verifies `import TRACS`, `tracs --version`, every subcommand's
-`--help`, and the presence of samtools/minimap2/htsbox/sourmash before
-finishing — so a bad image fails at build time rather than hours into a
-pipeline run. The `import` is the check that matters: that is what SIGILLs when
-the extension does not match the CPU.
-
-`cxx-compiler` is in the package list deliberately. Without a C++ toolchain the
-build fails late inside pybind11 with a misleading message:
-
-```
-RuntimeError: Unsupported compiler -- at least C++11 support is needed!
-```
-
-conda-forge's compilers also ship activation scripts that do **not** run inside
-`%post`, so the definition file exports `CC`/`CXX` explicitly.
-
-Then point the pipeline at it:
-
-```bash
-nextflow run . ... --run_tracs true --tracs_container /path/to/tracs_1.1.1.sif
-```
-
-Confirm it took effect without launching anything:
+Confirm the override took effect without launching anything:
 
 ```bash
 nextflow inspect . -profile local --mode illumina_metagenome --input <samplesheet> \
-    --run_tracs true --tracs_container /path/to/tracs_1.1.1.sif | grep -A1 TRACS_BUILD_DB
+    --run_tracs true --tracs_container <image> | grep -A1 TRACS_BUILD_DB
 ```
 
 > Use `nextflow inspect`, not the parameter summary printed at the start of a
 > run — that summary evaluates container closures against *default* parameters,
-> so it shows the biocontainer even when an override is active. The same applies
+> so it shows the default image even when an override is active. The same applies
 > to `--aviary_container`.
 
-**Mixed hardware.** A SIF built on a newer CPU reintroduces the same crash on
-older nodes. For a heterogeneous cluster, build once against a portable
-baseline instead of `native` by editing the marked line near the top of
-`%post` in `containers/tracs_1.1.1.def`:
-
-```bash
-TRACS_MARCH="x86-64-v2"    # SSE4.2 baseline (~2009+); x86-64-v3 for AVX2 (~2013+)
-```
-
-It is a plain shell variable rather than a build argument so it works on any
-Apptainer version. The `.def` applies it by patching `setup.py`, because
-setuptools appends `extra_compile_args` last and `CFLAGS` cannot override them.
-
-**Diagnosing.** To confirm SIGILL is the extension rather than a dependency:
-
-```bash
-apptainer exec <image> python -c "import TRACS; print('extension loads OK')"
-lscpu | grep -oE 'avx[0-9a-z_]+' | sort -u     # what your CPU actually supports
-```
-
-inStrain is unaffected — it is pure Python plus pysam. If TRACS blocks you, run
-with `--run_instrain true --run_tracs false` and add TRACS once the image is
-built.
+inStrain is unaffected: it is pure Python plus pysam.
 
 ### Dorado SIF
 
