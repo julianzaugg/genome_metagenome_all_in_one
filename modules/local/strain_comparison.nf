@@ -420,7 +420,7 @@ process TRACS_PREFLIGHT {
     set -e
 
     if [ "\$rc" -eq 132 ]; then
-        echo "ERROR: the TRACS container crashed with 'Illegal instruction' (SIGILL): it was compiled for a newer CPU than \$(hostname) has. Unset --tracs_container to use the portable default image, or rerun without --run_tracs. See docs/containers.md, 'TRACS image'." >&2
+        echo "ERROR: the TRACS container crashed with 'Illegal instruction' (SIGILL): it was compiled for a newer CPU than \$(hostname) has. Use TRACS >= 1.1.2 (the default image; unset --tracs_container), or rerun without --run_tracs. See docs/containers.md, 'TRACS image'." >&2
     fi
     exit \$rc
     """

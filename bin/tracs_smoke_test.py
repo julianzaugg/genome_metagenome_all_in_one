@@ -3,7 +3,7 @@
 
 TRACS compiles its extension with -O3 -march=<target>, so a build for a newer CPU
 dies with SIGILL (exit 132) on import or inside these kernels. Used by
-TRACS_PREFLIGHT and by the image build CI (under an emulated old CPU).
+TRACS_PREFLIGHT.
 """
 import os
 import tempfile

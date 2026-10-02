@@ -52,7 +52,7 @@ Caveats:
 - **CHECKV_CLUSTER** uses the same Galaxy CheckV SIF as `CHECKV_ENDTOEND` for
   blast+ plus the vendored stdlib `anicalc.py`/`aniclust.py`. The standalone
   `blast` image does not ship Python in all builds.
-- **TRACS** uses a portable image built by this repo's CI, not the biocontainer.
+- **TRACS** needs 1.1.2 or newer; older builds crash on older CPUs.
   See the TRACS image section below.
 
 ### Aviary SIF
@@ -105,16 +105,10 @@ or set that parameter in a profile.
 
 ### TRACS image
 
-`--run_tracs` uses `ghcr.io/julianzaugg/tracs:1.1.1-x86-64-v2` by default, which is pulled like any biocontainer and needs no local image.
+`--run_tracs` uses the `quay.io/biocontainers/tracs:1.1.4` biocontainer and needs no local image.
 
-**Why not the biocontainer.** TRACS's `setup.py` hard-codes
-
-```python
-extra_compile_args = ["-O3", "-ffast-math", "-march=native"]
-```
-
-so its C++ extension is compiled for whatever CPU built it.
-The bioconda image therefore runs only on CPUs at least as new as bioconda's build host, and crashes on anything older:
+**Use TRACS >= 1.1.2.** Up to 1.1.1, TRACS's `setup.py` hard-coded `-march=native`, so the bioconda build carried its build host's CPU features (the 1.1.1 extension contains AVX-512).
+On any older CPU it crashes:
 
 ```
 Command error:
@@ -123,28 +117,19 @@ Command exit status:
   132
 ```
 
-Upstream issue [#8](https://github.com/gtonkinhill/tracs/issues/8) reports exactly this and was closed without a fix; the flag is still in v1.1.1, the newest release.
+[v1.1.2](https://github.com/gtonkinhill/tracs/releases/tag/v1.1.2) dropped the flag (upstream issues #8 and #23); the target is now set only via the `TRACS_MARCH` environment variable at build time.
+The 1.1.4 bioconda extension contains no AVX, BMI or SSE4.2 instructions, so it runs on any x86-64 CPU.
+1.1.2 to 1.1.4 change only the build, so results match 1.1.1.
 
-**How the default image is built.** [`containers/tracs/Dockerfile`](../containers/tracs/Dockerfile) builds TRACS from source with `-march=native` patched to `-march=x86-64-v2` (SSE4.2, every x86-64 server CPU since about 2009).
-The [`TRACS image`](../.github/workflows/tracs-image.yml) GitHub Actions workflow builds it on every change to those files and, before pushing to GHCR from `main`, checks that:
-
-- the extension contains no AVX/AVX-512 instructions (`objdump`);
-- [`bin/tracs_smoke_test.py`](../bin/tracs_smoke_test.py), which calls every TRACS C++ kernel, passes on an emulated 2008 Nehalem CPU (`qemu-x86_64 -cpu Nehalem`);
-- the bioconda image fails that same test, which proves the emulated CPU check can fail.
-
-Images are tagged `1.1.1-x86-64-v2` (what the pipeline uses) and `1.1.1-x86-64-v2-<commit sha>` (immutable, for pinning).
-To change the TRACS version or CPU target, edit `TRACS_VERSION` / `TRACS_MARCH` in the workflow and push to `main`.
-`x86-64-v3` (AVX2, about 2013+) may run TRACS's kernels slightly faster, but alignment, not these kernels, dominates TRACS run time.
-
-**Launch-time check.** Whatever image is used, `TRACS_PREFLIGHT` runs the same smoke test as soon as the pipeline starts.
+**Launch-time check.** Whatever image is used, `TRACS_PREFLIGHT` runs [`bin/tracs_smoke_test.py`](../bin/tracs_smoke_test.py), which calls every TRACS C++ kernel on tiny inputs, as soon as the pipeline starts.
 An image that cannot run on the host fails within minutes, with a message pointing here, instead of days later at `TRACS_BUILD_DB`.
-On a cluster, it runs on one node, so it cannot vouch for nodes with different CPUs.
+On a cluster it runs on one node, so it cannot vouch for nodes with different CPUs.
 
 **Overriding.** `--tracs_container` accepts any image URI or `.sif` path, e.g. a pre-pulled copy for offline nodes:
 
 ```bash
-apptainer pull containers/tracs_1.1.1-x86-64-v2.sif docker://ghcr.io/julianzaugg/tracs:1.1.1-x86-64-v2
-nextflow run . ... --run_tracs true --tracs_container containers/tracs_1.1.1-x86-64-v2.sif
+apptainer pull containers/tracs_1.1.4.sif docker://quay.io/biocontainers/tracs:1.1.4--py312h0c6b66a_0
+nextflow run . ... --run_tracs true --tracs_container containers/tracs_1.1.4.sif
 ```
 
 Confirm the override took effect without launching anything:
