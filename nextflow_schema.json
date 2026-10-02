@@ -66,7 +66,7 @@
                 },
                 "tracs_container": {
                     "type": "string",
-                    "description": "Optional explicit TRACS .sif path. If unset, TRACS_* use the quay.io biocontainer. Needed only when that image crashes with exit status 132 (SIGILL): TRACS compiles with -march=native, so the published build is tied to bioconda's build-host CPU. Build containers/tracs_1.1.1.def on the compute host -- see docs/containers.md."
+                    "description": "Optional TRACS image URI or .sif path. If unset, TRACS_* use ghcr.io/julianzaugg/tracs:1.1.1-x86-64-v2, built by this repo for any x86-64-v2 CPU. Not the bioconda image: upstream compiles with -march=native, so it crashes with exit status 132 (SIGILL) on older CPUs -- see docs/containers.md."
                 },
                 "dorado_container": {
                     "type": "string",
