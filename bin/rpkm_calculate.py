@@ -164,7 +164,7 @@ def main():
         samples = ", ".join(missing_normalisers)
         print(
             "ERROR: No positive SingleM marker RPKM normalizer was calculated for "
-            f"sample(s): {samples}. Check 22_rpkm/singlem_blast for marker hits, "
+            f"sample(s): {samples}. Check 23_rpkm/singlem_blast for marker hits, "
             "or provide matching prebuilt marker databases and marker stats with "
             "--rpkm_singlem_marker_dbs and --rpkm_singlem_marker_lengths.",
             file=sys.stderr,

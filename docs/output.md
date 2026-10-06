@@ -44,7 +44,7 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 23_rpkm_expanded/       # RPKM for the expanded catalogue; reuses 23_rpkm's SingleM marker blast (if the expanded catalogue is built)
 24_marker_tree/         # MAG + GTDB-reference marker-gene tree (if --run_marker_tree)
 25_reference_genomes/   # normalised reference FASTAs, their CheckM2 report, predicted proteins, USERREF_-prefixed copies for GTDB-Tk (if --reference_genomes)
-26_strain_reference/    # genomes used for strain comparison + audit table, combined FASTA, .stb (if --run_instrain / --run_tracs)
+26_strain_reference/    # genomes used for strain comparison + audit table (if --run_instrain / --run_tracs); combined FASTA and .stb (--run_instrain only)
 27_instrain/            # inStrain profiles, compare output, and strain-sharing summary tables (if --run_instrain)
 28_tracs/               # TRACS reference db, pairwise SNP/transmission distances, strain clusters (if --run_tracs)
 29_comparison_reads/    # external reads (--comparison_reads): QC/host-removed reads, sylph/singlem profiles, mapping vs the final bin representatives, RPKM vs the gene catalogue (if --comparison_reads)
@@ -342,7 +342,7 @@ against the HQ set in the read-stat report before reading anything into its abse
 from the results.
 
 Each profile also carries per-gene results, from `inStrain profile -g`. In
-`<sample>.IS/output/<sample>_gene_info.tsv` you get, per gene: `coverage`,
+`<sample>.IS/output/<sample>.IS_gene_info.tsv` you get, per gene: `coverage`,
 `breadth`, `breadth_minCov`, `nucl_diversity`, and the counts behind pN/pS
 (`N_sites`/`S_sites`, SNV/SNS counts); `SNVs.tsv` gains the gene each variant falls
 in and whether it is non-synonymous. Per-gene **breadth against the shared
