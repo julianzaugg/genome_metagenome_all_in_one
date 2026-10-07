@@ -202,8 +202,11 @@ workflow ILLUMINA_METAGENOME {
 
     // --- External reference genomes (normalise + CheckM2 + protein prediction) ---
     if (params.reference_genomes) {
+        // A single-alternative brace glob (*.{fasta}) matches nothing, so only brace multiple extensions.
+        def ref_exts = params.reference_genome_extension.tokenize(',')*.trim()
+        def ref_glob = ref_exts.size() == 1 ? "*.${ref_exts[0]}" : "*.{${ref_exts.join(',')}}"
         ch_reference_files = Channel
-            .fromPath("${params.reference_genomes}/*.{${params.reference_genome_extension}}", checkIfExists: true)
+            .fromPath("${params.reference_genomes}/${ref_glob}", checkIfExists: true)
             .collect()
         REFERENCE_GENOMES(
             ch_reference_files,
