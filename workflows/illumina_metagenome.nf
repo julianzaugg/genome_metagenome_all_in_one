@@ -34,7 +34,7 @@ include { SPADES }                      from '../modules/nf-core/spades/main'
 include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict/main'
 include { PREP_ASSEMBLY }               from '../modules/local/util'
 include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
-include { COVERM_CLUSTER; COVERM_CLUSTER_HQ; COVERM_CLUSTER_HQ_REF; COVERM_GENOME; COVERM_GENOME as COVERM_GENOME_HQ; COVERM_GENOME as COVERM_GENOME_HQ_DEREP; COVERM_GENOME as COVERM_GENOME_HQ_REF; COVERM_CONTIG } from '../modules/local/coverm'
+include { COVERM_CLUSTER; COVERM_CLUSTER as COVERM_CLUSTER_STRAIN_REF; COVERM_CLUSTER_HQ; COVERM_CLUSTER_HQ_REF; COVERM_GENOME; COVERM_GENOME as COVERM_GENOME_HQ; COVERM_GENOME as COVERM_GENOME_HQ_DEREP; COVERM_GENOME as COVERM_GENOME_HQ_REF; COVERM_CONTIG } from '../modules/local/coverm'
 include { COVERM_CLUSTER_WS; COVERM_CLUSTER_HQ_WS; COVERM_GENOME_PAIRED as COVERM_GENOME_WS_DEREP; COVERM_GENOME_PAIRED as COVERM_GENOME_WS_HQ } from '../modules/local/coverm'
 include { MAPPING_ASSESS as MAPPING_ASSESS_SCAFFOLDS; MAPPING_ASSESS as MAPPING_ASSESS_BINS; MAPPING_ASSESS as MAPPING_ASSESS_HQ_DIRECT; MAPPING_ASSESS as MAPPING_ASSESS_HQ_DEREP; MAPPING_ASSESS as MAPPING_ASSESS_HQ_REF; MAPPING_ASSESS as MAPPING_ASSESS_WS_DEREP; MAPPING_ASSESS as MAPPING_ASSESS_WS_HQ } from '../modules/local/mapping_assessment'
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
@@ -92,6 +92,17 @@ workflow ILLUMINA_METAGENOME {
         }
         if (params.strain_genome_source == 'hq_ref_representatives' && !params.reference_genomes) {
             error "--strain_genome_source hq_ref_representatives dereplicates the HQ MAGs together with external references. Set --reference_genomes, or choose another --strain_genome_source."
+        }
+        if (params.strain_genome_source == 'references' && !params.reference_genomes) {
+            error "--strain_genome_source references maps reads to the external reference genomes only. Set --reference_genomes, or choose another --strain_genome_source."
+        }
+    }
+    if (params.strain_include_comparison_reads) {
+        if (!params.comparison_reads) {
+            error "--strain_include_comparison_reads adds the --comparison_reads samples to strain comparison. Set --comparison_reads, or unset --strain_include_comparison_reads."
+        }
+        if (!(params.run_instrain || params.run_tracs)) {
+            error "--strain_include_comparison_reads needs strain comparison enabled (--run_tracs / --run_instrain)."
         }
     }
     if (params.comparison_assemblies && params.skip_gene_catalogue) {
@@ -408,26 +419,6 @@ workflow ILLUMINA_METAGENOME {
             }
         }
 
-        // --- Strain comparison (are samples carrying the same strain?) ---
-        // Both tools map every sample to ONE shared reference set, so this must sit
-        // after the cross-sample dereplication block above.
-        if (params.run_instrain || params.run_tracs) {
-            def strain_genomes = params.strain_genome_source == 'representatives'           ? ch_reps
-                               : params.strain_genome_source == 'hq_representatives_direct' ? ch_hq_reps
-                               : params.strain_genome_source == 'hq_ref_representatives'    ? ch_hq_ref_derep_reps
-                               :                                                              ch_hq_derep_reps
-            STRAIN_COMPARISON(
-                ch_clean,
-                strain_genomes,
-                ch_checkm2_tsv,
-                ch_checkm1_tsv,
-                params.run_instrain,
-                params.run_tracs,
-                false
-            )
-            ch_versions = ch_versions.mix(STRAIN_COMPARISON.out.versions)
-        }
-
         // --- Taxonomy + per-genome QC on all bins ---
         // Classify the external reference genomes in the same GTDB-Tk run when the user
         // wants their taxonomy and/or wants them placed in the marker tree.
@@ -539,6 +530,40 @@ workflow ILLUMINA_METAGENOME {
         ch_versions = ch_versions
             .mix(COMPARISON_INPUT_CHECK.out.versions)
             .mix(COMPARISON_READS.out.versions)
+    }
+
+    // --- Strain comparison (are samples carrying the same strain?) ---
+    // Maps every sample to ONE shared reference set, so this sits after cross-sample
+    // dereplication and COMPARISON_READS (whose cleaned reads can join it).
+    if (params.run_instrain || params.run_tracs) {
+        if (params.strain_genome_source == 'references') {
+            COVERM_CLUSTER_STRAIN_REF(REFERENCE_GENOMES.out.genomes, REFERENCE_GENOMES.out.checkm2, [])
+            ch_strain_ref_reps = COVERM_CLUSTER_STRAIN_REF.out.representatives.collect()
+            ch_versions = ch_versions.mix(COVERM_CLUSTER_STRAIN_REF.out.versions)
+        }
+        def strain_genomes = params.strain_genome_source == 'representatives'           ? ch_reps
+                           : params.strain_genome_source == 'hq_representatives_direct' ? ch_hq_reps
+                           : params.strain_genome_source == 'hq_ref_representatives'    ? ch_hq_ref_derep_reps
+                           : params.strain_genome_source == 'references'                ? ch_strain_ref_reps
+                           :                                                              ch_hq_derep_reps
+        def strain_reads = ch_clean
+        if (params.strain_include_comparison_reads) {
+            strain_reads = strain_reads.mix(
+                COMPARISON_READS.out.clean_reads.map { meta, r -> [ meta + [cohort: 'comparison'], r ] }
+            )
+        }
+        STRAIN_COMPARISON(
+            strain_reads,
+            strain_genomes,
+            ch_checkm2_tsv,
+            ch_checkm1_tsv,
+            params.reference_genomes ? REFERENCE_GENOMES.out.checkm2 : Channel.value([]),
+            params.reference_genomes ? REFERENCE_GENOMES.out.genomes : Channel.value([]),
+            params.run_instrain,
+            params.run_tracs,
+            false
+        )
+        ch_versions = ch_versions.mix(STRAIN_COMPARISON.out.versions)
     }
 
     // --- RPKM (selected stream only: host-filtered fastp reads, or fastp reads if host removal is skipped) ---

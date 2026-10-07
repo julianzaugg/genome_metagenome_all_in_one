@@ -44,7 +44,7 @@ its own output tree, so there's no reason to). Illumina metagenome layout:
 23_rpkm_expanded/       # RPKM for the expanded catalogue; reuses 23_rpkm's SingleM marker blast (if the expanded catalogue is built)
 24_marker_tree/         # MAG + GTDB-reference marker-gene tree (if --run_marker_tree)
 25_reference_genomes/   # normalised reference FASTAs, their CheckM2 report, predicted proteins, USERREF_-prefixed copies for GTDB-Tk (if --reference_genomes)
-26_strain_reference/    # genomes used for strain comparison + audit table (if --run_instrain / --run_tracs); combined FASTA and .stb (--run_instrain only)
+26_strain_reference/    # genomes used for strain comparison, audit table, sample/cohort table (if --run_instrain / --run_tracs); combined FASTA and .stb (--run_instrain only)
 27_instrain/            # inStrain profiles, compare output, and strain-sharing summary tables (if --run_instrain)
 28_tracs/               # TRACS reference db, pairwise SNP/transmission distances, strain clusters (if --run_tracs)
 29_comparison_reads/    # external reads (--comparison_reads): QC/host-removed reads, sylph/singlem profiles, mapping vs the final bin representatives, RPKM vs the gene catalogue (if --comparison_reads)
@@ -316,12 +316,23 @@ CheckM report scored it, and whether it was kept. The set starts from
 and is then filtered to `--strain_min_completeness` / `--strain_max_contamination`
 (default 90/5, MIMAG high-quality). That is deliberately stricter than the pipeline's HQ
 filter (`completeness − 3×contamination ≥ 50`), which admits e.g. a 95%-complete /
-15%-contaminated bin — fine for abundance, too loose here (see the caveats below). Genomes
-absent from the CheckM report — external `--reference_genomes` — are kept. If this table
+15%-contaminated bin — fine for abundance, too loose here (see the caveats below). If this table
 shows almost everything dropped, that is a real signal about MAG quality, not a bug; the two
 threshold params are the dial. `strain_reference.fasta` / `.stb` are the combined reference
 for inStrain, with every contig header prefixed by its bin name (bins from separate
 per-sample assemblies can otherwise share `NODE_..._length_..._cov_...` names).
+
+External `--reference_genomes` are filtered against their own CheckM2 report (`source` = `reference_checkm2`), so a contaminated reference is dropped just like a contaminated MAG.
+A genome absent from every report is kept and marked `unscored`.
+The `origin` column says whether each genome is a `mag` or a `reference`.
+References only enter the strain set through two `--strain_genome_source` values:
+- `hq_ref_representatives`: HQ MAGs and references are dereplicated together at 95% ANI, so a species is anchored on a reference when the reference wins its cluster on CheckM2 quality.
+- `references`: only the references, first dereplicated among themselves at 95% ANI (`reference_clusters/`), so that two references of one species do not split its reads.
+  With no MAGs as decoys, reads from related organisms that have no reference can mis-map onto the references and inflate diversity, so `hq_ref_representatives` is the safer default.
+
+`strain_samples.tsv` lists every sample that entered the comparison and its `cohort`: `main` for `--input` samples and `comparison` for `--comparison_reads` samples.
+Comparison reads are only included with `--strain_include_comparison_reads true`.
+Their QC'd, host-removed reads are then mapped to the same strain reference set and compared pairwise with the main samples, so the inStrain and TRACS tables answer whether an external sample carries the same strain as one of yours.
 
 `27_instrain/` (inStrain, short reads only). `profiles/<sample>.IS/` are the per-sample
 microdiversity profiles; `strain_compare.IS/output/` holds the raw pairwise tables. The key
@@ -453,6 +464,8 @@ samples to) plus the same bases-mapped assessment (unless `--skip_mapping_assess
 expanded one if `--reference_genomes`/`--comparison_assemblies` built one, otherwise
 the samples-only one) — its own SingleM marker blast is recomputed, since it's a
 different set of reads.
+
+Comparison reads are left out of strain comparison unless `--strain_include_comparison_reads true` is set (see the strain comparison section above).
 
 `30_comparison_assemblies/` holds pyrodigal output (`.faa`/`.fna`/`.gff`) per external
 assembly — nothing else runs on these assemblies (no binning, no dereplication). Their

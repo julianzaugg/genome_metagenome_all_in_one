@@ -38,10 +38,12 @@ include { TRACS_CLUSTER         } from '../../modules/local/strain_comparison'
 
 workflow STRAIN_COMPARISON {
     take:
-    reads           // [ meta, reads ]  — QC'd / host-removed reads, one entry per sample
+    reads           // [ meta, reads ]  — QC'd / host-removed reads, one entry per sample; meta.cohort = main | comparison
     genomes         // collected list of representative genome fastas (strain_genome_source set)
     checkm2_report  // CheckM2 quality_report.tsv (path or [])
     checkm1_report  // CheckM1 summary tsv (path or [])
+    ref_checkm2     // CheckM2 report for --reference_genomes (path or [])
+    ref_genomes     // collected --reference_genomes fastas (or []); labels the audit table's origin column
     run_instrain    // bool
     run_tracs       // bool
     long_reads      // bool — selects the TRACS minimap2 preset
@@ -49,9 +51,15 @@ workflow STRAIN_COMPARISON {
     main:
     ch_versions = Channel.empty()
 
+    // Which samples entered the comparison, and from which cohort (main --input or
+    // --comparison_reads); published alongside the reference audit table.
+    ch_sample_table = reads
+        .map { meta, _r -> "${meta.id}\t${meta.cohort ?: 'main'}" }
+        .collectFile(name: 'strain_samples.tsv', newLine: true, sort: true, seed: 'sample\tcohort')
+
     // Restrict to genomes good enough for strain calling. Both tools consume the SAME
     // filtered set, so their calls stay directly comparable.
-    STRAIN_GENOME_FILTER(genomes, checkm2_report, checkm1_report)
+    STRAIN_GENOME_FILTER(genomes, checkm2_report, checkm1_report, ref_checkm2, ref_genomes, ch_sample_table)
     ch_versions = ch_versions.mix(STRAIN_GENOME_FILTER.out.versions)
 
     // The filter can legitimately empty the set (e.g. no MAG reaches 90/5). Drop the
@@ -151,6 +159,7 @@ workflow STRAIN_COMPARISON {
     emit:
     reference_genomes = ch_ref_genomes
     reference_report  = STRAIN_GENOME_FILTER.out.report
+    samples           = STRAIN_GENOME_FILTER.out.samples
     instrain_compare  = ch_instrain_compare
     instrain_excluded = ch_instrain_excluded
     instrain_summary  = ch_instrain_summary

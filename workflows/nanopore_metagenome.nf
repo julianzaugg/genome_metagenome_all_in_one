@@ -17,7 +17,7 @@ include { MYLOASM }                     from '../modules/local/assembly_isolate'
 include { DORADO_POLISH }               from '../modules/local/long_reads'
 include { CHECKM2_PREDICT }             from '../modules/nf-core/checkm2/predict/main'
 include { AVIARY_RECOVER; AVIARY_COLLECT_BINS } from '../modules/local/aviary'
-include { COVERM_CLUSTER; COVERM_CLUSTER_HQ; COVERM_CLUSTER_HQ_REF; COVERM_GENOME as COVERM_GENOME_ONT; COVERM_GENOME as COVERM_GENOME_HQ_ONT; COVERM_GENOME as COVERM_GENOME_HQ_DEREP_ONT; COVERM_GENOME as COVERM_GENOME_HQ_REF_ONT; COVERM_CONTIG as COVERM_CONTIG_ONT } from '../modules/local/coverm'
+include { COVERM_CLUSTER; COVERM_CLUSTER as COVERM_CLUSTER_STRAIN_REF; COVERM_CLUSTER_HQ; COVERM_CLUSTER_HQ_REF; COVERM_GENOME as COVERM_GENOME_ONT; COVERM_GENOME as COVERM_GENOME_HQ_ONT; COVERM_GENOME as COVERM_GENOME_HQ_DEREP_ONT; COVERM_GENOME as COVERM_GENOME_HQ_REF_ONT; COVERM_CONTIG as COVERM_CONTIG_ONT } from '../modules/local/coverm'
 include { COVERM_CLUSTER_WS; COVERM_CLUSTER_HQ_WS; COVERM_GENOME_PAIRED as COVERM_GENOME_WS_DEREP_ONT; COVERM_GENOME_PAIRED as COVERM_GENOME_WS_HQ_ONT } from '../modules/local/coverm'
 include { MAPPING_ASSESS as MAPPING_ASSESS_SCAFFOLDS_ONT; MAPPING_ASSESS as MAPPING_ASSESS_BINS_ONT; MAPPING_ASSESS as MAPPING_ASSESS_HQ_DIRECT_ONT; MAPPING_ASSESS as MAPPING_ASSESS_HQ_DEREP_ONT; MAPPING_ASSESS as MAPPING_ASSESS_HQ_REF_ONT; MAPPING_ASSESS as MAPPING_ASSESS_WS_DEREP_ONT; MAPPING_ASSESS as MAPPING_ASSESS_WS_HQ_ONT } from '../modules/local/mapping_assessment'
 include { CHECKM1_LINEAGEWF }           from '../modules/local/checkm1'
@@ -71,6 +71,12 @@ workflow NANOPORE_METAGENOME {
         if (params.strain_genome_source == 'hq_ref_representatives' && !params.reference_genomes) {
             error "--strain_genome_source hq_ref_representatives dereplicates the HQ MAGs together with external references. Set --reference_genomes, or choose another --strain_genome_source."
         }
+        if (params.strain_genome_source == 'references' && !params.reference_genomes) {
+            error "--strain_genome_source references maps reads to the external reference genomes only. Set --reference_genomes, or choose another --strain_genome_source."
+        }
+    }
+    if (params.strain_include_comparison_reads) {
+        error "--strain_include_comparison_reads is not supported for nanopore_metagenome in this version (no long-read --comparison_reads)."
     }
 
     INPUT_CHECK(params.input, params.mode)
@@ -386,15 +392,23 @@ workflow NANOPORE_METAGENOME {
         // cross-sample dereplication block above. inStrain is short-read only (guarded
         // above), so only TRACS runs here.
         if (params.run_tracs) {
+            if (params.strain_genome_source == 'references') {
+                COVERM_CLUSTER_STRAIN_REF(REFERENCE_GENOMES.out.genomes, REFERENCE_GENOMES.out.checkm2, [])
+                ch_strain_ref_reps = COVERM_CLUSTER_STRAIN_REF.out.representatives.collect()
+                ch_versions = ch_versions.mix(COVERM_CLUSTER_STRAIN_REF.out.versions)
+            }
             def strain_genomes = params.strain_genome_source == 'representatives'           ? ch_reps
                                : params.strain_genome_source == 'hq_representatives_direct' ? ch_hq_reps
                                : params.strain_genome_source == 'hq_ref_representatives'    ? ch_hq_ref_derep_reps
+                               : params.strain_genome_source == 'references'                ? ch_strain_ref_reps
                                :                                                              ch_hq_derep_reps
             STRAIN_COMPARISON(
                 ch_clean,
                 strain_genomes,
                 ch_checkm2_tsv,
                 ch_checkm1_tsv,
+                params.reference_genomes ? REFERENCE_GENOMES.out.checkm2 : Channel.value([]),
+                params.reference_genomes ? REFERENCE_GENOMES.out.genomes : Channel.value([]),
                 false,
                 params.run_tracs,
                 true
