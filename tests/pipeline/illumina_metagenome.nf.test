@@ -94,4 +94,35 @@ nextflow_pipeline {
             assert path("$outputDir/05_metaspades/SAMPLE_A.scaffolds.fasta").exists()
         }
     }
+
+    test("illumina_metagenome stub compares comparison-read strains against references + HQ MAGs") {
+
+        options "-stub"
+
+        when {
+            params {
+                mode   = "illumina_metagenome"
+                input  = "${projectDir}/assets/samplesheets/illumina_metagenome.csv"
+                outdir = "$outputDir"
+                skip_host_removal = true
+                run_tracs = true
+                run_instrain = true
+                reference_genomes = "${projectDir}/tests/data/refs"
+                reference_genome_extension = "fasta"
+                strain_genome_source = "hq_ref_representatives"
+                comparison_reads = "${projectDir}/assets/samplesheets/illumina_comparison_reads.csv"
+                strain_include_comparison_reads = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert workflow.trace.tasks().count { it.name.contains('TRACS_ALIGN') } == 3
+            assert workflow.trace.tasks().count { it.name.contains('INSTRAIN_PROFILE') } == 3
+            assert path("$outputDir/26_strain_reference/strain_reference_genomes.tsv").readLines()[0].endsWith('\torigin')
+            def cohorts = path("$outputDir/26_strain_reference/strain_samples.tsv").readLines()
+            assert cohorts.contains('ILL_CMP_1\tcomparison')
+            assert cohorts.contains('SAMPLE_A\tmain')
+        }
+    }
 }

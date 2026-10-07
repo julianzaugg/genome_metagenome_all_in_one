@@ -30,9 +30,9 @@
  * push pairs toward a false "different strain" call. Independent completeness and
  * contamination thresholds (MIMAG high-quality by default) are the right control.
  *
- * Genomes absent from the CheckM report(s) are KEPT — this preserves the existing
- * "external reference genomes bypass the quality filter" behaviour of
- * COVERM_CLUSTER_HQ_REF when strain_genome_source = hq_ref_representatives.
+ * External reference genomes are scored against their own CheckM2 report (read whatever
+ * hq_source is, as references only ever have CheckM2 scores). A genome absent from every
+ * report is still KEPT and flagged 'unscored'.
  */
 process STRAIN_GENOME_FILTER {
     label 'process_single'
@@ -41,10 +41,14 @@ process STRAIN_GENOME_FILTER {
     path(genomes, stageAs: 'genomes/*')
     path(checkm2_report)   // [] if CheckM2 skipped
     path(checkm1_report)   // [] if CheckM1 skipped
+    path(ref_checkm2_report)                    // [] without --reference_genomes
+    path(ref_genomes, stageAs: 'ref_genomes/*') // [] without --reference_genomes; sets the origin column
+    path(sample_table, stageAs: 'strain_samples.tsv') // sample -> cohort; passed through only to be published
 
     output:
     path 'reference_genomes/*.fasta',    emit: genomes, optional: true
     path 'strain_reference_genomes.tsv', emit: report
+    path 'strain_samples.tsv',           emit: samples, includeInputs: true
     path 'versions.yml',                 emit: versions
 
     script:
@@ -70,6 +74,7 @@ process STRAIN_GENOME_FILTER {
         checkm2) read_qc "${checkm2_report}" checkm2 ;;
         checkm1) read_qc "${checkm1_report}" checkm1 ;;
     esac
+    read_qc "${ref_checkm2_report}" reference_checkm2
 
     # Genome names, from the staged fasta basenames.
     : > genome_names.txt
@@ -79,14 +84,21 @@ process STRAIN_GENOME_FILTER {
     done
     sort -u genome_names.txt -o genome_names.txt
 
+    # External reference stems, for the origin column.
+    : > ref_names.txt
+    for f in ref_genomes/*; do
+        [ -e "\$f" ] || continue
+        b=\$(basename "\$f"); printf '%s\\n' "\${b%.*}" >> ref_names.txt
+    done
+
     # One verdict per genome, in a single pass. 'either' passes a genome if ANY selected
     # report passes it; 'both' needs EVERY report it appears in to pass it (matching
     # hq_quality_source elsewhere). The reported values come from the deciding report. A
-    # genome present in no report is KEPT and flagged 'unscored', so user-supplied
-    # reference genomes -- which never appear in the MAG CheckM reports -- are not
-    # silently dropped.
+    # genome present in no report (e.g. a reference with no CheckM2 report) is KEPT and
+    # flagged 'unscored' rather than silently dropped.
     awk -F '\\t' -v mc=${min_completeness} -v xc=${max_contamination} -v need_all=${need_all} '
-        FNR==NR {
+        FILENAME=="ref_names.txt" { isref[\$1]=1; next }
+        FILENAME=="qc_values.tsv" {
             g=\$1; ok = (\$2 >= mc && \$3 <= xc)
             first = !(g in seen)
             if (first) { pass[g] = need_all ? 1 : 0 }
@@ -96,14 +108,14 @@ process STRAIN_GENOME_FILTER {
             next
         }
         {
-            g=\$1
-            if (!(g in seen))    { print g "\\tNA\\tNA\\tnone\\tunscored\\tnot_in_checkm_report" }
-            else if (pass[g])    { print g "\\t" comp[g] "\\t" cont[g] "\\t" src[g] "\\tkept\\tpassed" }
-            else                 { print g "\\t" comp[g] "\\t" cont[g] "\\t" src[g] "\\tdropped\\tbelow_thresholds" }
+            g=\$1; origin = (g in isref) ? "reference" : "mag"
+            if (!(g in seen))    { print g "\\tNA\\tNA\\tnone\\tunscored\\tnot_in_checkm_report\\t" origin }
+            else if (pass[g])    { print g "\\t" comp[g] "\\t" cont[g] "\\t" src[g] "\\tkept\\tpassed\\t" origin }
+            else                 { print g "\\t" comp[g] "\\t" cont[g] "\\t" src[g] "\\tdropped\\tbelow_thresholds\\t" origin }
         }
-    ' qc_values.tsv genome_names.txt > verdicts.tsv
+    ' ref_names.txt qc_values.tsv genome_names.txt > verdicts.tsv
 
-    printf 'genome\\tcompleteness\\tcontamination\\tsource\\tstatus\\treason\\n' > strain_reference_genomes.tsv
+    printf 'genome\\tcompleteness\\tcontamination\\tsource\\tstatus\\treason\\torigin\\n' > strain_reference_genomes.tsv
     cat verdicts.tsv >> strain_reference_genomes.tsv
 
     mkdir -p reference_genomes
@@ -131,8 +143,8 @@ process STRAIN_GENOME_FILTER {
     """
     mkdir -p reference_genomes
     cp genomes/* reference_genomes/ 2>/dev/null || (printf '>c\\nACGT\\n' > reference_genomes/rep.1.fasta)
-    printf 'genome\\tcompleteness\\tcontamination\\tsource\\tstatus\\treason\\n' > strain_reference_genomes.tsv
-    printf 'rep.1\\t99.0\\t0.5\\tcheckm2\\tkept\\tpassed\\n' >> strain_reference_genomes.tsv
+    printf 'genome\\tcompleteness\\tcontamination\\tsource\\tstatus\\treason\\torigin\\n' > strain_reference_genomes.tsv
+    printf 'rep.1\\t99.0\\t0.5\\tcheckm2\\tkept\\tpassed\\tmag\\n' >> strain_reference_genomes.tsv
     echo '"${task.process}": {awk: stub}' > versions.yml
     """
 }

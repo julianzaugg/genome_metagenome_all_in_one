@@ -215,5 +215,6 @@ workflow COMPARISON_READS {
     singlem_profile = ch_singlem_profile
     bin_abundance   = ch_bin_abundance
     gene_rpkm       = ch_gene_rpkm
+    clean_reads     = ch_clean          // [ meta, reads ] QC'd / host-removed, for strain comparison
     versions        = ch_versions
 }

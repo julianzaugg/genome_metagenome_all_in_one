@@ -95,4 +95,32 @@ nextflow_pipeline {
             assert path("$outputDir/34_comparison_assemblies").exists()
         }
     }
+
+    test("nanopore_metagenome stub runs TRACS on references only, with comparison reads") {
+
+        options "-stub"
+
+        when {
+            params {
+                mode   = "nanopore_metagenome"
+                input  = "${projectDir}/assets/samplesheets/nanopore_metagenome.csv"
+                outdir = "$outputDir"
+                skip_host_removal = true
+                skip_polypolish = true
+                run_tracs = true
+                reference_genomes = "${projectDir}/tests/data/refs"
+                strain_genome_source = "references"
+                comparison_reads = "${projectDir}/assets/samplesheets/nanopore_comparison_reads.csv"
+                strain_include_comparison_reads = true
+            }
+        }
+
+        then {
+            assert workflow.success
+            assert workflow.trace.tasks().any { it.name.contains('COVERM_CLUSTER_STRAIN_REF') }
+            assert workflow.trace.tasks().count { it.name.contains('TRACS_ALIGN_ONT') } == 3
+            assert path("$outputDir/30_strain_reference/reference_clusters/representatives/ref_a.fasta").exists()
+            assert path("$outputDir/30_strain_reference/strain_samples.tsv").readLines().contains('NANO_CMP_1\tcomparison')
+        }
+    }
 }
